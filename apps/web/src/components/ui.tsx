@@ -1,5 +1,5 @@
 import { STATUS_LABELS, type Status, tagColorHex } from "@usercue/shared";
-import { type ReactNode, useEffect, useState } from "react";
+import { createContext, type ReactNode, useCallback, useContext, useEffect, useState } from "react";
 import { ArrowUp, Check, Copy } from "./icons";
 
 export const STATUS_DOT: Record<Status, string> = {
@@ -194,6 +194,47 @@ export function Empty({ title, children }: { title: string; children?: ReactNode
 
 export function ErrorText({ error }: { error: Error | null }) {
   return error ? <p className="text-xs text-rose-500">{error.message}</p> : null;
+}
+
+type Toast = { id: number; message: string; tone: "success" | "error" };
+type ToastInput = { message: string; tone?: Toast["tone"] };
+const ToastContext = createContext<(toast: ToastInput) => void>(() => {});
+
+export function useToast() {
+  return useContext(ToastContext);
+}
+
+export function ToastProvider({ children }: { children: ReactNode }) {
+  const [toasts, setToasts] = useState<Toast[]>([]);
+  const notify = useCallback((toast: ToastInput) => {
+    const id = Date.now() + Math.random();
+    setToasts((current) => [
+      ...current,
+      { id, message: toast.message, tone: toast.tone ?? "success" },
+    ]);
+    window.setTimeout(() => {
+      setToasts((current) => current.filter((item) => item.id !== id));
+    }, 4000);
+  }, []);
+
+  return (
+    <ToastContext.Provider value={notify}>
+      {children}
+      <div className="pointer-events-none fixed right-4 bottom-4 z-[100] flex max-w-sm flex-col gap-2">
+        {toasts.map((toast) => (
+          <div
+            key={toast.id}
+            role="status"
+            className={`rounded-2xl px-4 py-3 text-[13px] shadow-[var(--shadow)] ${
+              toast.tone === "error" ? "bg-rose-500 text-white" : "bg-fg text-bg"
+            }`}
+          >
+            {toast.message}
+          </div>
+        ))}
+      </div>
+    </ToastContext.Provider>
+  );
 }
 
 export function Checkbox({

@@ -1,5 +1,6 @@
 import { env } from "./env";
 import { decryptSecret } from "./secret";
+import { sendSmtpEmail, smtpEnabled } from "./smtp";
 import { getWorkspace } from "./workspace";
 
 export async function resendCredentials(): Promise<{ key: string; from: string } | null> {
@@ -24,21 +25,8 @@ export async function sendInviteEmail(
   url: string,
 ): Promise<{ sent: boolean; error?: string }> {
   const creds = await resendCredentials();
-  if (!creds || (await getWorkspace()).resend_enabled !== 1) {
-    return { sent: false, error: "Invite email is turned off" };
-  }
-
-  const res = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${creds.key}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      from: creds.from,
-      to,
-      subject: "You're invited to a UserCue workspace",
-      html: `<div style="font-family:ui-sans-serif,system-ui,sans-serif;max-width:440px;margin:0 auto;padding:32px 8px;color:#18181b">
+  const subject = "You're invited to a UserCue workspace";
+  const html = `<div style="font-family:ui-sans-serif,system-ui,sans-serif;max-width:440px;margin:0 auto;padding:32px 8px;color:#18181b">
   <p style="font-size:16px;font-weight:600;margin:0 0 8px">Join the workspace</p>
   <p style="font-size:14px;line-height:1.5;color:#52525b;margin:0 0 20px">
     You were invited to help triage feedback. Use this link to create your staff account.
@@ -49,13 +37,25 @@ export async function sendInviteEmail(
     </a>
   </p>
   <p style="font-size:12px;line-height:1.5;color:#a1a1aa;margin:0;word-break:break-all">${url}</p>
-</div>`,
-    }),
-  });
+</div>`;
 
-  if (!res.ok) {
-    const body = (await res.json().catch(() => null)) as { message?: string } | null;
-    return { sent: false, error: body?.message ?? "Could not send the invite email" };
+  if (creds && (await getWorkspace()).resend_enabled === 1) {
+    const res = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${creds.key}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ from: creds.from, to, subject, html }),
+    });
+
+    if (!res.ok) {
+      const body = (await res.json().catch(() => null)) as { message?: string } | null;
+      return { sent: false, error: body?.message ?? "Could not send the invite email" };
+    }
+    return { sent: true };
   }
-  return { sent: true };
+
+  if (await smtpEnabled()) return sendSmtpEmail({ to, subject, html });
+  return { sent: false, error: "Invite email is turned off" };
 }

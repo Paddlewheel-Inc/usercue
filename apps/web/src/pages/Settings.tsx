@@ -15,7 +15,7 @@ import { type FormEvent, type ReactNode, useEffect, useRef, useState } from "rea
 import { Link, Redirect, useParams } from "wouter";
 import { ArrowUpRight, Check, ChevronDown, More, Plus, Trash } from "../components/icons";
 import { ProviderIcon } from "../components/OAuthButtons";
-import { Avatar, Checkbox, CopyField, ErrorText } from "../components/ui";
+import { Avatar, Checkbox, CopyField, ErrorText, useToast } from "../components/ui";
 import { uploadImage } from "../lib/api";
 import { timeAgo } from "../lib/format";
 import {
@@ -146,6 +146,7 @@ function TabLink({ href, active, children }: { href: string; active: boolean; ch
 function ResendSettings() {
   const { data } = useSettings();
   const save = useSaveSettings();
+  const toast = useToast();
   const [from, setFrom] = useState(data?.resend.from ?? "");
   const [apiKey, setApiKey] = useState("");
   const [enabled, setEnabled] = useState(Boolean(data?.resend.enabled));
@@ -161,11 +162,17 @@ function ResendSettings() {
 
   function submit(e: FormEvent) {
     e.preventDefault();
-    save.mutate({
-      resendFrom: from,
-      resendApiKey: apiKey.trim() || undefined,
-      resendEnabled: enabled,
-    });
+    save.mutate(
+      {
+        resendFrom: from,
+        resendApiKey: apiKey.trim() || undefined,
+        resendEnabled: enabled,
+      },
+      {
+        onSuccess: () => toast({ message: "Resend settings saved." }),
+        onError: (error) => toast({ message: error.message, tone: "error" }),
+      },
+    );
   }
 
   return (
@@ -211,7 +218,140 @@ function ResendSettings() {
         Email staff invites with Resend
       </Checkbox>
       <div className="flex items-center gap-2">
-        <ErrorText error={save.error} />
+        <div className="flex-1" />
+        <button type="submit" className="btn-primary" disabled={save.isPending}>
+          Save
+        </button>
+      </div>
+    </form>
+  );
+}
+
+function SmtpSettings() {
+  const { data } = useSettings();
+  const save = useSaveSettings();
+  const toast = useToast();
+  const [host, setHost] = useState(data?.smtp?.host ?? "");
+  const [port, setPort] = useState(String(data?.smtp?.port ?? 587));
+  const [user, setUser] = useState(data?.smtp?.user ?? "");
+  const [password, setPassword] = useState("");
+  const [from, setFrom] = useState(data?.smtp?.from ?? "");
+  const [secure, setSecure] = useState(Boolean(data?.smtp?.secure));
+  const [enabled, setEnabled] = useState(Boolean(data?.smtp?.enabled));
+
+  useEffect(() => {
+    if (!data?.smtp) return;
+    setHost(data.smtp.host ?? "");
+    setPort(String(data.smtp.port ?? 587));
+    setUser(data.smtp.user ?? "");
+    setPassword("");
+    setFrom(data.smtp.from ?? "");
+    setSecure(data.smtp.secure);
+    setEnabled(data.smtp.enabled);
+  }, [data]);
+
+  if (!data) return null;
+
+  function submit(e: FormEvent) {
+    e.preventDefault();
+    save.mutate(
+      {
+        smtpHost: host,
+        smtpPort: Number(port),
+        smtpUser: user,
+        smtpPass: password.trim() || undefined,
+        smtpFrom: from,
+        smtpSecure: secure,
+        smtpEnabled: enabled,
+      },
+      {
+        onSuccess: () => toast({ message: "SMTP settings saved." }),
+        onError: (error) => toast({ message: error.message, tone: "error" }),
+      },
+    );
+  }
+
+  return (
+    <form onSubmit={submit} className="flex flex-col gap-3">
+      <div>
+        <h2 className="text-[13px] font-medium">SMTP email</h2>
+        <p className="mt-1 text-[12px] text-muted">
+          Use your own SMTP server for staff invite emails. The password is encrypted and never
+          shown again.
+        </p>
+      </div>
+      <div className="grid grid-cols-[1fr_7rem] gap-2">
+        <label className="flex flex-col gap-1.5">
+          <span className="px-1 text-[11px] text-muted">Host</span>
+          <input
+            className="input"
+            value={host}
+            onChange={(e) => setHost(e.target.value)}
+            placeholder="smtp.example.com"
+            autoComplete="off"
+          />
+        </label>
+        <label className="flex flex-col gap-1.5">
+          <span className="px-1 text-[11px] text-muted">Port</span>
+          <input
+            className="input"
+            type="number"
+            min={1}
+            max={65535}
+            value={port}
+            onChange={(e) => setPort(e.target.value)}
+            required
+          />
+        </label>
+      </div>
+      <label className="flex flex-col gap-1.5">
+        <span className="px-1 text-[11px] text-muted">Username</span>
+        <input
+          className="input"
+          value={user}
+          onChange={(e) => setUser(e.target.value)}
+          autoComplete="off"
+        />
+      </label>
+      <label className="flex flex-col gap-1.5">
+        <span className="px-1 text-[11px] text-muted">Password</span>
+        <input
+          className="input"
+          type="password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          autoComplete="new-password"
+          spellCheck={false}
+          placeholder={
+            data.smtp?.passConfigured || data.smtp?.fromEnv
+              ? "Leave blank to keep the current password"
+              : "SMTP password"
+          }
+        />
+        {!data.smtp?.passConfigured && data.smtp?.fromEnv && (
+          <p className="px-1 text-[11px] text-faint">
+            Using SMTP credentials from the environment.
+          </p>
+        )}
+      </label>
+      <label className="flex flex-col gap-1.5">
+        <span className="px-1 text-[11px] text-muted">From email</span>
+        <input
+          className="input"
+          value={from}
+          onChange={(e) => setFrom(e.target.value)}
+          placeholder="UserCue <noreply@yourdomain.com>"
+          autoComplete="off"
+          required={Boolean(host.trim())}
+        />
+      </label>
+      <Checkbox checked={secure} onChange={setSecure}>
+        Use a secure connection
+      </Checkbox>
+      <Checkbox checked={enabled} onChange={setEnabled}>
+        Email staff invites with SMTP
+      </Checkbox>
+      <div className="flex items-center gap-2">
         <div className="flex-1" />
         <button type="submit" className="btn-primary" disabled={save.isPending}>
           Save
@@ -838,6 +978,8 @@ function GeneralSettings() {
 
       {canSettings && <ResendSettings />}
 
+      {canSettings && <SmtpSettings />}
+
       {canSettings && <DiscordSettings />}
 
       {canSettings && <TeamsSettings />}
@@ -897,9 +1039,6 @@ function GeneralSettings() {
             <p className="text-[12px] text-muted">
               {promoted} already had an account. They can now open the workspace.
             </p>
-          )}
-          {invite.data && "warning" in invite.data && invite.data.warning && (
-            <p className="text-xs text-rose-500">{invite.data.warning}</p>
           )}
           {lastLink && (
             <CopyField

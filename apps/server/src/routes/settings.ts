@@ -25,6 +25,7 @@ import {
   parsePermissions,
   staffRoleId,
 } from "../roles";
+import { smtpConfigured } from "../smtp";
 import {
   getWorkspace,
   parseAccent,
@@ -218,6 +219,17 @@ async function snapshot(origin: string) {
       keyHash: workspace.resend_key_hash ? workspace.resend_key_hash.slice(0, 12) : null,
       fromEnv: Boolean(!workspace.resend_key_cipher && creds),
     },
+    smtp: {
+      configured: await smtpConfigured(),
+      enabled: workspace.smtp_enabled === 1,
+      host: workspace.smtp_host || env.smtpHost || null,
+      port: workspace.smtp_host ? workspace.smtp_port : env.smtpPort,
+      user: workspace.smtp_host ? workspace.smtp_user : env.smtpUser,
+      from: workspace.smtp_from || env.smtpFrom || null,
+      secure: workspace.smtp_host ? workspace.smtp_secure === 1 : env.smtpSecure,
+      passConfigured: Boolean(workspace.smtp_pass_cipher || env.smtpPass),
+      fromEnv: !workspace.smtp_host && Boolean(env.smtpHost || env.smtpFrom),
+    },
     discord: {
       configured: await discordConfigured(),
       enabled: workspace.discord_enabled === 1,
@@ -293,6 +305,13 @@ export const settings = new Hono<AppEnv>()
         resendEnabled: v.optional(v.boolean()),
         resendFrom: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(200))),
         resendApiKey: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(200))),
+        smtpHost: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(200))),
+        smtpEnabled: v.optional(v.boolean()),
+        smtpPort: v.optional(v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(65535))),
+        smtpUser: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(200))),
+        smtpPass: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(200))),
+        smtpFrom: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(200))),
+        smtpSecure: v.optional(v.boolean()),
         discordEnabled: v.optional(v.boolean()),
         discordWebhookUrl: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(200))),
         teamsEnabled: v.optional(v.boolean()),
@@ -312,6 +331,16 @@ export const settings = new Hono<AppEnv>()
       const hasFrom = Boolean(from || env.resendFrom);
       if (body.resendEnabled && (!hasKey || !hasFrom)) {
         return c.json({ error: "Add a Resend API key and from address first." }, 400);
+      }
+      const smtpHost = body.smtpHost !== undefined ? body.smtpHost.trim() : current.smtp_host;
+      const smtpFrom = body.smtpFrom !== undefined ? body.smtpFrom.trim() : current.smtp_from;
+      if ((smtpHost && !smtpFrom) || (!smtpHost && smtpFrom)) {
+        return c.json({ error: "Add both an SMTP host and from address." }, 400);
+      }
+      const hasSmtpHost = Boolean(smtpHost || env.smtpHost);
+      const hasSmtpFrom = Boolean(smtpFrom || env.smtpFrom);
+      if (body.smtpEnabled && (!hasSmtpHost || !hasSmtpFrom)) {
+        return c.json({ error: "Add an SMTP host and from address first." }, 400);
       }
       const webhook = body.discordWebhookUrl?.trim();
       if (webhook && !isDiscordWebhook(webhook)) {
@@ -576,18 +605,23 @@ export const settings = new Hono<AppEnv>()
         : await insertInvite.get(token, email, invitedBy, now + INVITE_TTL);
       if (!row) return c.json({ error: "Could not create the invite." }, 500);
 
-      let warning: string | undefined;
-      if (await resendEnabled()) {
-        const result = await sendInviteEmail(email, inviteUrl(origin, row.token));
-        if (result.sent) await markInviteSent.run(row.id);
-        else warning = result.error;
-      }
+      void sendInviteEmail(email, inviteUrl(origin, row.token))
+        .then(async (result) => {
+          if (result.sent) await markInviteSent.run(row.id);
+          else if (
+            result.error !== "SMTP email is not configured" &&
+            result.error !== "Invite email is turned off"
+          ) {
+            console.error("Could not send invite email:", result.error);
+          }
+        })
+        .catch((error: unknown) => {
+          console.error("Could not send invite email:", error);
+        });
 
-      const fresh = (await findInviteByEmail.get(email, now)) ?? row;
       return c.json({
-        ...serializeInvite(origin, fresh),
-        emailSent: fresh.email_sent === 1,
-        warning,
+        ...serializeInvite(origin, row),
+        emailSent: false,
       });
     },
   )

@@ -15,10 +15,12 @@
     "@resvg/resvg-js": "^2.6.2",
     "@usercue/shared": "workspace:*",
     "hono": "^4.9.0",
+    "nodemailer": "^7.0.9",
     "satori": "^0.57.2",
     "valibot": "^1.1.0"
   },
   "devDependencies": {
-    "@types/bun": "latest"
+    "@types/bun": "latest",
+    "@types/nodemailer": "^6.4.17"
   }
 }

@@ -10,6 +10,13 @@ export interface WorkspaceRow {
   resend_from: string;
   resend_key_cipher: string;
   resend_key_hash: string;
+  smtp_enabled: number;
+  smtp_host: string;
+  smtp_port: number;
+  smtp_user: string;
+  smtp_pass_cipher: string;
+  smtp_from: string;
+  smtp_secure: number;
   assignment_mode: string;
   assignment_cursor: number;
   accent: string;
@@ -54,6 +61,13 @@ const update = db.query(
      resend_from = ?,
      resend_key_cipher = ?,
      resend_key_hash = ?,
+     smtp_enabled = ?,
+     smtp_host = ?,
+     smtp_port = ?,
+     smtp_user = ?,
+     smtp_pass_cipher = ?,
+     smtp_from = ?,
+     smtp_secure = ?,
      assignment_mode = ?,
      changelog_enabled = ?,
      changelog_comments = ?,
@@ -96,6 +110,13 @@ const empty: WorkspaceRow = {
   resend_from: "",
   resend_key_cipher: "",
   resend_key_hash: "",
+  smtp_enabled: 0,
+  smtp_host: "",
+  smtp_port: 587,
+  smtp_user: "",
+  smtp_pass_cipher: "",
+  smtp_from: "",
+  smtp_secure: 0,
   assignment_mode: "off",
   assignment_cursor: 0,
   accent: "pink",
@@ -142,6 +163,13 @@ export async function saveWorkspace(patch: {
   resendEnabled?: boolean;
   resendFrom?: string;
   resendApiKey?: string;
+  smtpEnabled?: boolean;
+  smtpHost?: string;
+  smtpPort?: number;
+  smtpUser?: string;
+  smtpPass?: string;
+  smtpFrom?: string;
+  smtpSecure?: boolean;
   assignmentMode?: AssignmentMode;
   changelogEnabled?: boolean;
   changelogComments?: boolean;
@@ -170,6 +198,17 @@ export async function saveWorkspace(patch: {
   const hash = patch.resendApiKey?.trim()
     ? hashSecret(patch.resendApiKey.trim())
     : current.resend_key_hash;
+  const smtpEnabled =
+    patch.smtpEnabled === undefined ? current.smtp_enabled : patch.smtpEnabled ? 1 : 0;
+  const smtpHost = patch.smtpHost !== undefined ? patch.smtpHost.trim() : current.smtp_host;
+  const smtpPort = patch.smtpPort ?? current.smtp_port;
+  const smtpUser = patch.smtpUser !== undefined ? patch.smtpUser.trim() : current.smtp_user;
+  const smtpPassCipher = patch.smtpPass?.trim()
+    ? encryptSecret(patch.smtpPass.trim())
+    : current.smtp_pass_cipher;
+  const smtpFrom = patch.smtpFrom !== undefined ? patch.smtpFrom.trim() : current.smtp_from;
+  const smtpSecure =
+    patch.smtpSecure === undefined ? current.smtp_secure : patch.smtpSecure ? 1 : 0;
   const mode =
     patch.assignmentMode === undefined
       ? parseAssignmentMode(current.assignment_mode)
@@ -206,6 +245,13 @@ export async function saveWorkspace(patch: {
     from,
     cipher,
     hash,
+    smtpEnabled,
+    smtpHost,
+    smtpPort,
+    smtpUser,
+    smtpPassCipher,
+    smtpFrom,
+    smtpSecure,
     mode,
     changelog,
     changelogComments,
