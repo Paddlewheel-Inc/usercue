@@ -49,7 +49,7 @@ export const PROVIDER_SPEC: Record<AuthProviderId, ProviderSpec> = {
     authorize: "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
     token: "https://login.microsoftonline.com/common/oauth2/v2.0/token",
     user: "https://graph.microsoft.com/oidc/userinfo",
-    scope: "openid email profile",
+    scope: "openid email profile User.Read",
   },
 };
 
