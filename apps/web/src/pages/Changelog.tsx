@@ -1,29 +1,18 @@
 import {
   CHANGELOG_LIMITS,
   CHANGELOG_REACTIONS,
-  CHANGELOG_SECTIONS,
   type ChangelogReaction,
   isEmptyHtml,
   LIMITS,
-  stripHtml,
 } from "@usercue/shared";
-import { type FormEvent, type ReactNode, useState } from "react";
+import { type FormEvent, type ReactNode, useRef, useState } from "react";
 import { Link, useLocation, useParams } from "wouter";
 import { Editor, SuggestionPicker } from "../components/Editor";
-import {
-  ChevronDown,
-  ChevronLeft,
-  Close,
-  Comment,
-  Hash,
-  Pencil,
-  Plus,
-  Trash,
-} from "../components/icons";
+import { ChevronLeft, Close, Comment, Hash, Pencil, Plus, Trash } from "../components/icons";
 import { OAuthButtons } from "../components/OAuthButtons";
 import { PostLink, RichText } from "../components/RichText";
 import { Avatar, Empty, ErrorText, RoleBadge } from "../components/ui";
-import type { ChangelogComment, ChangelogEntry } from "../lib/api";
+import { type ChangelogComment, type ChangelogEntry, uploadImage } from "../lib/api";
 import { longDate, timeAgo } from "../lib/format";
 import {
   type ChangelogDraft,
@@ -286,6 +275,11 @@ function PublishedEntry({
             </div>
           )}
         </div>
+        {entry.imageUrl && (
+          <div className="mt-4 overflow-hidden rounded-2xl bg-hover">
+            <img src={entry.imageUrl} alt="" className="aspect-[1200/630] w-full object-cover" />
+          </div>
+        )}
         {entry.linkedPost && (
           <p className="mt-3">
             <PostLink id={entry.linkedPost.id} title={entry.linkedPost.title} />
@@ -295,25 +289,6 @@ function PublishedEntry({
           <div className="changelog-body mt-3">
             <RichText html={entry.body} />
           </div>
-        )}
-        {entry.sections.some((section) => section.body) && (
-          <ul className="mt-5 flex flex-col gap-2">
-            {entry.sections.map((section) =>
-              section.body ? (
-                <li
-                  key={section.id}
-                  className="grid grid-cols-[6.75rem_minmax(0,1fr)] items-center gap-3"
-                >
-                  <span
-                    className={`inline-flex h-6 items-center justify-center rounded-full px-2 text-[12px] font-medium ${sectionTone(section.label)}`}
-                  >
-                    <span className="truncate">{section.label}</span>
-                  </span>
-                  <span className="text-[13px] leading-6">{stripHtml(section.body)}</span>
-                </li>
-              ) : null,
-            )}
-          </ul>
         )}
         {entry.contributors.length > 0 && (
           <div className="mt-6">
@@ -337,6 +312,75 @@ function PublishedEntry({
         <ErrorText error={deleteError} />
       </div>
     </article>
+  );
+}
+
+function BannerField({ value, onChange }: { value: string; onChange: (url: string) => void }) {
+  const input = useRef<HTMLInputElement>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<Error | null>(null);
+
+  async function pick(file: File) {
+    setBusy(true);
+    setError(null);
+    try {
+      onChange(await uploadImage(file));
+    } catch (err) {
+      setError(err instanceof Error ? err : new Error("Upload failed"));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      <div>
+        <p className="text-[12px] font-medium text-muted">Link preview image</p>
+        <p className="mt-0.5 text-[12px] text-faint">
+          Shown when someone shares this update. 1200 by 630 works best. Leave empty to use the
+          automatic card.
+        </p>
+      </div>
+      <div className="flex items-center gap-3">
+        <span className="inline-flex aspect-[1200/630] w-40 shrink-0 overflow-hidden rounded-xl bg-hover">
+          {value ? <img src={value} alt="" className="size-full object-cover" /> : null}
+        </span>
+        <div className="flex min-w-0 flex-1 flex-col gap-1">
+          <input
+            ref={input}
+            type="file"
+            accept="image/png,image/jpeg,image/gif"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) void pick(file);
+              e.target.value = "";
+            }}
+          />
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              className="btn-quiet h-7 px-2.5"
+              disabled={busy}
+              onClick={() => input.current?.click()}
+            >
+              {busy ? "Uploading…" : value ? "Change" : "Add"}
+            </button>
+            {value && (
+              <button
+                type="button"
+                className="btn-quiet h-7 px-2.5"
+                disabled={busy}
+                onClick={() => onChange("")}
+              >
+                Remove
+              </button>
+            )}
+          </div>
+          <ErrorText error={error} />
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -370,125 +414,6 @@ function FeedbackLink({
         </button>
       )}
       {picking && <SuggestionPicker query="" onPick={onPick} onClose={onClose} />}
-    </div>
-  );
-}
-
-interface SectionDraft {
-  key: string;
-  label: string;
-  body: string;
-}
-
-function isPreset(label: string) {
-  return CHANGELOG_SECTIONS.some((preset) => preset.toLowerCase() === label.toLowerCase());
-}
-
-function sectionTone(label: string) {
-  switch (label.trim().toLowerCase()) {
-    case "changed":
-      return "bg-sky-400/15 text-sky-300";
-    case "fixed":
-      return "bg-emerald-400/15 text-emerald-400";
-    case "removed":
-      return "bg-rose-400/15 text-rose-400";
-    default:
-      return "bg-hover text-muted";
-  }
-}
-
-function SectionFields({
-  sections,
-  onChange,
-}: {
-  sections: SectionDraft[];
-  onChange: (sections: SectionDraft[]) => void;
-}) {
-  function update(key: string, patch: Partial<SectionDraft>) {
-    onChange(sections.map((section) => (section.key === key ? { ...section, ...patch } : section)));
-  }
-
-  function add() {
-    if (sections.length >= CHANGELOG_LIMITS.sections) return;
-    onChange([...sections, { key: crypto.randomUUID(), label: "Changed", body: "" }]);
-  }
-
-  return (
-    <div className="flex flex-col gap-2">
-      <p className="text-[12px] font-medium text-muted">Sections</p>
-      {sections.length > 0 && (
-        <ul className="flex flex-col gap-2">
-          {sections.map((section) => (
-            <li key={section.key} className="flex items-center gap-2">
-              {isPreset(section.label) ? (
-                <div
-                  className={`relative w-[6.75rem] shrink-0 rounded-full ${sectionTone(section.label)}`}
-                >
-                  <select
-                    aria-label="Section"
-                    className="h-8 w-full appearance-none bg-transparent pr-6 pl-2.5 text-[12px] font-medium outline-none"
-                    value={section.label}
-                    onChange={(e) =>
-                      update(section.key, {
-                        label: e.target.value === "__custom" ? "" : e.target.value,
-                      })
-                    }
-                  >
-                    {CHANGELOG_SECTIONS.map((label) => (
-                      <option key={label} value={label}>
-                        {label}
-                      </option>
-                    ))}
-                    <option value="__custom">Other</option>
-                  </select>
-                  <ChevronDown
-                    width={12}
-                    height={12}
-                    className="pointer-events-none absolute top-1/2 right-2 -translate-y-1/2 opacity-80"
-                  />
-                </div>
-              ) : (
-                <input
-                  aria-label="Section name"
-                  className="h-8 w-[6.75rem] shrink-0 rounded-full bg-hover px-2.5 text-[12px] font-medium text-muted outline-none"
-                  placeholder="Name"
-                  value={section.label}
-                  maxLength={CHANGELOG_LIMITS.sectionLabel}
-                  onChange={(e) => update(section.key, { label: e.target.value })}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") e.preventDefault();
-                  }}
-                />
-              )}
-              <input
-                className="h-8 min-w-0 flex-1 rounded-full bg-hover/70 px-3.5 text-[13px] outline-none placeholder:text-faint focus:bg-hover"
-                placeholder={
-                  section.label ? `What was ${section.label.toLowerCase()}?` : "What changed?"
-                }
-                value={section.body}
-                maxLength={LIMITS.body}
-                onChange={(e) => update(section.key, { body: e.target.value })}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") e.preventDefault();
-                }}
-              />
-              <button
-                type="button"
-                aria-label={`Remove ${section.label}`}
-                className="inline-flex size-7 items-center justify-center rounded-full text-faint hover:bg-hover hover:text-fg"
-                onClick={() => onChange(sections.filter((item) => item.key !== section.key))}
-              >
-                <Close width={12} height={12} />
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-      {sections.length < CHANGELOG_LIMITS.sections && (
-        <button type="button" className="btn-quiet h-7 w-fit px-2.5" onClick={add}>
-          <Plus /> Add a line
-        </button>
-      )}
     </div>
   );
 }
@@ -594,15 +519,9 @@ function EntryForm({
   const [, navigate] = useLocation();
   const [title, setTitle] = useState(entry?.title ?? "");
   const [body, setBody] = useState(entry?.body ?? "");
-  const [sections, setSections] = useState<SectionDraft[]>(() =>
-    (entry?.sections ?? []).map((section) => ({
-      key: `section-${section.id}`,
-      label: section.label,
-      body: stripHtml(section.body),
-    })),
-  );
   const [contributors, setContributors] = useState(entry?.contributors ?? []);
   const [linked, setLinked] = useState(entry?.linkedPost ?? null);
+  const [imageUrl, setImageUrl] = useState(entry?.imageUrl ?? "");
   const [picking, setPicking] = useState(false);
   const busy = pending ?? create.isPending;
   const failure = error === undefined ? create.error : error;
@@ -613,9 +532,7 @@ function EntryForm({
       title: title.trim(),
       body,
       postId: linked?.id ?? null,
-      sections: sections
-        .filter((section) => section.label.trim() && section.body.trim())
-        .map((section) => ({ label: section.label.trim(), body: section.body.trim() })),
+      imageUrl,
       contributorIds: contributors.map((person) => person.id),
     };
     if (onSubmit) {
@@ -645,13 +562,14 @@ function EntryForm({
         <Editor
           value={body}
           onChange={setBody}
-          placeholder="What changed?  Type # to link a suggestion"
+          placeholder="What changed?  Type / for New, Fixed, Removed…  # to link a suggestion"
           maxLength={LIMITS.body}
           mentions
           headings
+          sections
         />
-        <SectionFields sections={sections} onChange={setSections} />
         <ContributorFields people={contributors} onChange={setContributors} />
+        <BannerField value={imageUrl} onChange={setImageUrl} />
         <FeedbackLink
           linked={linked}
           picking={picking}
@@ -810,8 +728,9 @@ function CommentForm({ entryId }: { entryId: number }) {
       <Editor
         value={body}
         onChange={setBody}
-        placeholder="Write a comment…"
+        placeholder="Write a comment…  Type @ to mention someone"
         maxLength={LIMITS.comment}
+        people
       />
       {!user && Boolean(methods?.providers.length) && (
         <div className="mt-3">

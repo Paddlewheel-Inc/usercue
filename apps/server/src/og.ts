@@ -54,6 +54,7 @@ export interface OgEntry {
   id: number;
   title: string;
   body: string;
+  image_url: string;
   created_at: number;
   updated_at: number;
 }
@@ -64,7 +65,7 @@ export const ogPost = db.query<OgPost>(
 );
 
 export const ogEntry = db.query<OgEntry>(
-  "SELECT id, title, body, created_at, updated_at FROM changelog_entries WHERE id = ?",
+  "SELECT id, title, body, image_url, created_at, updated_at FROM changelog_entries WHERE id = ?",
 );
 
 interface Meta {
@@ -135,6 +136,7 @@ export function postMeta(origin: string, post: OgPost, branding: Branding): Meta
 }
 
 export function entryMeta(origin: string, entry: OgEntry, branding: Branding): Meta {
+  const custom = entry.image_url.trim();
   return {
     site: branding.name,
     type: "article",
@@ -142,7 +144,7 @@ export function entryMeta(origin: string, entry: OgEntry, branding: Branding): M
     title: `${entry.title} · ${branding.name}`,
     description: excerpt(entry.body, `${branding.name} changelog`),
     url: `${origin}/changelog/${entry.id}`,
-    image: `${origin}/api/og/changelog/${entry.id}.png`,
+    image: custom ? absolute(origin, custom) : `${origin}/api/og/changelog/${entry.id}.png`,
     publishedTime: entry.created_at,
   };
 }
@@ -316,4 +318,37 @@ export function renderEntryCard(entry: OgEntry, accent: string, site: string): P
       }),
     ),
   );
+}
+
+function hueFor(name: string): number {
+  return [...name].reduce((h, c) => (h * 31 + c.charCodeAt(0)) % 360, 7);
+}
+
+export function renderInitialsAvatar(name: string): Promise<Uint8Array> {
+  const label = name.trim() || "?";
+  const letter = label.charAt(0).toUpperCase();
+  const hue = hueFor(label);
+  const key = `avatar:${letter}:${hue}`;
+  return cached(key, async () => {
+    const svg = await satori(
+      el(
+        "div",
+        {
+          display: "flex",
+          width: 128,
+          height: 128,
+          alignItems: "center",
+          justifyContent: "center",
+          backgroundColor: `hsl(${hue}, 45%, 48%)`,
+          color: "#ffffff",
+          fontSize: 64,
+          fontWeight: 600,
+          fontFamily: "Geist",
+        },
+        letter,
+      ) as unknown as Parameters<typeof satori>[0],
+      { width: 128, height: 128, fonts: await loadFonts() },
+    );
+    return new Uint8Array(new Resvg(svg).render().asPng());
+  });
 }

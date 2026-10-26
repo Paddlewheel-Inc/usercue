@@ -3,6 +3,8 @@ import {
   CHANGELOG_LIMITS,
   CHANGELOG_REACTION_IDS,
   type ChangelogReaction,
+  changelogSectionChip,
+  changelogSectionLabel,
   isEmptyHtml,
   LIMITS,
   sanitizeHtml,
@@ -10,6 +12,7 @@ import {
 import { Hono } from "hono";
 import * as v from "valibot";
 import { db } from "../db";
+import { notifyMentions } from "../mentions";
 import { type AppEnv, rateLimit, requireTeam, requireUser } from "../middleware";
 import { publicOrigin } from "../oauth";
 import { hasPermission, parsePermissions } from "../roles";
@@ -26,23 +29,26 @@ const commentParam = v.object({
 
 const postId = v.nullable(v.pipe(v.number(), v.integer(), v.minValue(1)));
 
-const sectionInput = v.object({
-  label: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(CHANGELOG_LIMITS.sectionLabel)),
-  body: v.optional(v.pipe(v.string(), v.maxLength(LIMITS.body)), ""),
-});
-
 const contributorIds = v.pipe(
   v.array(v.pipe(v.number(), v.integer(), v.minValue(1))),
   v.maxLength(CHANGELOG_LIMITS.contributors),
 );
 
-const sectionsInput = v.pipe(v.array(sectionInput), v.maxLength(CHANGELOG_LIMITS.sections));
+const imageUrl = v.pipe(
+  v.string(),
+  v.trim(),
+  v.maxLength(200),
+  v.check(
+    (value) => !value || /^\/api\/uploads\/[A-Za-z0-9._-]+$/.test(value),
+    "Use an uploaded image.",
+  ),
+);
 
 const entryBody = v.object({
   title: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(LIMITS.title)),
   body: v.optional(v.pipe(v.string(), v.maxLength(LIMITS.body)), ""),
   postId: v.optional(postId),
-  sections: v.optional(sectionsInput, []),
+  imageUrl: v.optional(imageUrl, ""),
   contributorIds: v.optional(contributorIds, []),
 });
 
@@ -50,7 +56,7 @@ const entryPatch = v.object({
   title: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(LIMITS.title))),
   body: v.optional(v.pipe(v.string(), v.maxLength(LIMITS.body))),
   postId: v.optional(postId),
-  sections: v.optional(sectionsInput),
+  imageUrl: v.optional(imageUrl),
   contributorIds: v.optional(contributorIds),
 });
 
@@ -74,6 +80,7 @@ interface EntryRow {
   author_role_perms: string | null;
   comment_count: number;
   post_id: number | null;
+  image_url: string;
   linked_title: string | null;
   created_at: number;
   updated_at: number;
@@ -122,7 +129,8 @@ interface PersonRow {
 }
 
 const ENTRY_SELECT = `
-  SELECT e.id, e.title, e.body, e.author_id, e.author_name, e.post_id, e.created_at, e.updated_at,
+  SELECT e.id, e.title, e.body, e.author_id, e.author_name, e.post_id, e.image_url,
+         e.created_at, e.updated_at,
          u.avatar_url AS author_avatar,
          r.name AS author_role_name,
          r.icon_url AS author_role_icon,
@@ -138,12 +146,13 @@ const ENTRY_SELECT = `
 const listEntries = db.query<EntryRow>(`${ENTRY_SELECT} ORDER BY e.created_at DESC, e.id DESC`);
 const findEntry = db.query<EntryRow>(`${ENTRY_SELECT} WHERE e.id = ?`);
 const insertEntry = db.query<{ id: number }>(
-  `INSERT INTO changelog_entries (title, body, author_id, author_name, post_id)
-   VALUES (?, ?, ?, ?, ?) RETURNING id`,
+  `INSERT INTO changelog_entries (title, body, author_id, author_name, post_id, image_url)
+   VALUES (?, ?, ?, ?, ?, ?) RETURNING id`,
 );
 const updateEntry = db.query(
   `UPDATE changelog_entries
-   SET title = ?, body = ?, post_id = ?, updated_at = EXTRACT(EPOCH FROM NOW())::BIGINT
+   SET title = ?, body = ?, post_id = ?, image_url = ?,
+       updated_at = EXTRACT(EPOCH FROM NOW())::BIGINT
    WHERE id = ?`,
 );
 const findFeedback = db.query<{ id: number }>("SELECT id FROM posts WHERE id = ?");
@@ -202,9 +211,6 @@ const sectionsFor = db.query<SectionRow>(
   "SELECT id, entry_id, label, body, position FROM changelog_sections WHERE entry_id = ? ORDER BY position, id",
 );
 const clearSections = db.query("DELETE FROM changelog_sections WHERE entry_id = ?");
-const insertSection = db.query(
-  "INSERT INTO changelog_sections (entry_id, label, body, position) VALUES (?, ?, ?, ?)",
-);
 const listAllContributors = db.query<ContributorRow>(
   `SELECT c.entry_id, c.position, u.id AS user_id, u.name, u.avatar_url
    FROM changelog_contributors c
@@ -265,16 +271,30 @@ function groupByEntry<T extends { entry_id: number }>(rows: T[]) {
   return map;
 }
 
-function serializeSections(rows: SectionRow[]) {
-  return rows.map((row) => ({ id: row.id, label: row.label, body: row.body }));
-}
-
 function serializeContributors(rows: ContributorRow[]) {
   return rows.map((row) => ({
     id: row.user_id,
     name: row.name,
     avatarUrl: row.avatar_url || null,
   }));
+}
+
+function legacySectionHtml(sections: SectionRow[]) {
+  return sections
+    .flatMap((section) => {
+      const body = cleanBody(section.body);
+      if (!body) return [];
+      const label = changelogSectionLabel(section.label);
+      const chip = label ? `${changelogSectionChip(label)} ` : `<strong>${section.label}</strong> `;
+      return [`<p>${chip}${body}</p>`];
+    })
+    .join("");
+}
+
+function entryBodyHtml(body: string, sections: SectionRow[]) {
+  const legacy = legacySectionHtml(sections);
+  if (!legacy) return body;
+  return body ? `${body}${legacy}` : legacy;
 }
 
 function serializeEntry(
@@ -287,26 +307,19 @@ function serializeEntry(
   return {
     id: row.id,
     title: row.title,
-    body: row.body,
+    body: entryBodyHtml(row.body, sections),
     authorName: row.author_name,
     authorAvatar: row.author_avatar || null,
     authorRole: roleBadge(row.author_role_name, row.author_role_icon, row.author_role_perms),
     commentCount: commentsOn ? row.comment_count : 0,
     reactions,
-    sections: serializeSections(sections),
     contributors: serializeContributors(contributors),
     linkedPost:
       row.post_id && row.linked_title ? { id: row.post_id, title: row.linked_title } : null,
+    imageUrl: row.image_url.trim() || null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
-}
-
-function cleanSections(sections: { label: string; body: string }[]) {
-  return sections.flatMap((section) => {
-    const body = cleanBody(section.body);
-    return body ? [{ label: section.label, body }] : [];
-  });
 }
 
 async function resolveContributors(ids: number[]) {
@@ -320,17 +333,8 @@ async function resolveContributors(ids: number[]) {
   return unique;
 }
 
-async function writeExtras(
-  entryId: number,
-  sections: { label: string; body: string }[] | undefined,
-  contributorIds: number[] | undefined,
-) {
-  if (sections) {
-    await clearSections.run(entryId);
-    for (const [i, section] of sections.entries()) {
-      await insertSection.run(entryId, section.label, section.body, i);
-    }
-  }
+async function writeExtras(entryId: number, contributorIds: number[] | undefined) {
+  await clearSections.run(entryId);
   if (contributorIds) {
     await clearContributors.run(entryId);
     for (const [i, userId] of contributorIds.entries()) {
@@ -382,13 +386,7 @@ function feedXml(origin: string, entries: EntryRow[], sections: Map<number, Sect
     .map((entry) => {
       const link = `${origin}/changelog/${entry.id}`;
       const when = new Date(entry.created_at * 1000).toUTCString();
-      const parts = [entry.body];
-      for (const section of sections.get(entry.id) ?? []) {
-        if (!section.body) continue;
-        const label = section.label.replaceAll("<", "").replaceAll(">", "");
-        parts.push(`<h3>${label}</h3>${section.body}`);
-      }
-      const html = parts.filter(Boolean).join("") || entry.title;
+      const html = entryBodyHtml(entry.body, sections.get(entry.id) ?? []) || entry.title;
       return [
         "<item>",
         `<title>${xmlEscape(entry.title)}</title>`,
@@ -498,16 +496,15 @@ export const changelog = new Hono<AppEnv>()
   .post("/", requireTeam, rateLimit(20, 60), vValidator("json", entryBody), async (c) => {
     const user = c.get("user");
     if (!user) return c.json({ error: "Unauthorized" }, 401);
-    const { title, body, postId, sections, contributorIds: credits } = c.req.valid("json");
+    const { title, body, postId, imageUrl: banner, contributorIds: credits } = c.req.valid("json");
     const linked = await linkedPostId(postId);
     if (linked === undefined) return c.json({ error: "That suggestion was not found." }, 400);
-    const cleaned = cleanSections(sections);
     const people = await resolveContributors(credits);
     if (!people) return c.json({ error: "One of those people is no longer here." }, 400);
     const created = await db.transaction(async () => {
-      const row = await insertEntry.get(title, cleanBody(body), user.id, user.name, linked);
+      const row = await insertEntry.get(title, cleanBody(body), user.id, user.name, linked, banner);
       if (!row) return undefined;
-      await writeExtras(row.id, cleaned, people);
+      await writeExtras(row.id, people);
       return row;
     });
     if (!created) return c.json({ error: "Could not publish that update." }, 500);
@@ -554,7 +551,7 @@ export const changelog = new Hono<AppEnv>()
         patch.title === undefined &&
         patch.body === undefined &&
         patch.postId === undefined &&
-        patch.sections === undefined &&
+        patch.imageUrl === undefined &&
         patch.contributorIds === undefined
       ) {
         return c.json({ error: "Nothing to update." }, 400);
@@ -562,7 +559,6 @@ export const changelog = new Hono<AppEnv>()
       const linked =
         patch.postId === undefined ? current.post_id : await linkedPostId(patch.postId);
       if (linked === undefined) return c.json({ error: "That suggestion was not found." }, 400);
-      const cleaned = patch.sections === undefined ? undefined : cleanSections(patch.sections);
       const people =
         patch.contributorIds === undefined
           ? undefined
@@ -571,10 +567,13 @@ export const changelog = new Hono<AppEnv>()
         return c.json({ error: "One of those people is no longer here." }, 400);
       }
       const title = patch.title ?? current.title;
-      const body = patch.body === undefined ? current.body : cleanBody(patch.body);
+      const banner = patch.imageUrl === undefined ? current.image_url : patch.imageUrl;
+      const legacy = await sectionsFor.all(id);
+      const body =
+        patch.body === undefined ? entryBodyHtml(current.body, legacy) : cleanBody(patch.body);
       await db.transaction(async () => {
-        await updateEntry.run(title, body, linked, id);
-        await writeExtras(id, cleaned, people);
+        await updateEntry.run(title, body, linked, banner, id);
+        await writeExtras(id, people);
       });
       const flags = await changelogFlags();
       const entry = await loadEntry(id, c.get("user")?.id ?? null, flags.reactions, flags.comments);
@@ -611,6 +610,17 @@ export const changelog = new Hono<AppEnv>()
       if (!created) return c.json({ error: "Could not post that comment." }, 500);
       const row = await findComment.get(created.id, id);
       if (!row) return c.json({ error: "Could not post that comment." }, 500);
+      const entry = await findEntry.get(id);
+      if (entry) {
+        void notifyMentions({
+          html: clean,
+          origin: publicOrigin(c),
+          path: `/changelog/${id}#comments`,
+          title: entry.title,
+          authorName: user.name,
+          authorId: user.id,
+        });
+      }
       return c.json(serializeComment(row, { id: user.id, staff: user.staff }), 201);
     },
   )

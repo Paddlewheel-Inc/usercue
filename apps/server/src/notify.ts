@@ -16,8 +16,54 @@ interface PostInfo {
   title: string;
   body: string;
   authorName: string;
+  authorAvatar?: string | null;
   boardName: string;
   status: Status;
+  voteCount?: number;
+}
+
+function isPublicHttpOrigin(origin: string): boolean {
+  try {
+    const url = new URL(origin);
+    if (url.protocol !== "http:" && url.protocol !== "https:") return false;
+    const host = url.hostname.toLowerCase();
+    if (host === "localhost" || host === "127.0.0.1" || host === "::1") return false;
+    if (host.endsWith(".local") || host.endsWith(".internal")) return false;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function allowedAvatarHost(hostname: string): boolean {
+  const host = hostname.toLowerCase();
+  return (
+    host === "cdn.discordapp.com" ||
+    host.endsWith(".discordapp.com") ||
+    host === "avatars.githubusercontent.com" ||
+    host.endsWith(".googleusercontent.com") ||
+    host.endsWith(".rbxcdn.com") ||
+    host === "www.roblox.com"
+  );
+}
+
+function authorIconUrl(origin: string, post: PostInfo): string | undefined {
+  const avatar = post.authorAvatar?.trim();
+  if (avatar) {
+    if (/^\/api\/uploads\/[A-Za-z0-9._-]+$/.test(avatar)) {
+      if (!isPublicHttpOrigin(origin)) return undefined;
+      return `${origin}${avatar}`;
+    }
+    if (/^https:\/\//i.test(avatar)) {
+      try {
+        const url = new URL(avatar);
+        if (allowedAvatarHost(url.hostname)) return url.href;
+      } catch {}
+    }
+  }
+  if (!isPublicHttpOrigin(origin)) return undefined;
+  const name = encodeURIComponent(post.authorName.trim().slice(0, 80) || "?");
+  return `${origin}/api/og/avatar.png?name=${name}`;
 }
 
 const readMessageId = db.query<{ message_id: string }>(
@@ -105,15 +151,25 @@ async function editMessage(url: string, messageId: string, payload: unknown): Pr
 
 function postEmbed(origin: string, post: PostInfo, activity?: string) {
   const excerpt = stripHtml(post.body).slice(0, 300);
+  const votes = post.voteCount ?? 0;
+  const icon = authorIconUrl(origin, post);
   return {
     title: post.title,
     url: `${origin}/post/${post.id}`,
     description: excerpt || undefined,
     color: COLORS[post.status],
-    author: { name: `Post by ${post.authorName}` },
+    author: {
+      name: `Posted by ${post.authorName}`,
+      ...(icon ? { icon_url: icon } : {}),
+    },
     fields: [
-      { name: "Board", value: post.boardName, inline: true },
-      { name: "Status", value: STATUS_LABELS[post.status], inline: true },
+      { name: "📄 Category", value: post.boardName, inline: true },
+      { name: "📊 Status", value: STATUS_LABELS[post.status], inline: true },
+      {
+        name: "🔼 Votes",
+        value: `${votes} ${votes === 1 ? "vote" : "votes"}`,
+        inline: false,
+      },
     ],
     footer: activity ? { text: activity } : undefined,
     timestamp: new Date().toISOString(),
@@ -160,8 +216,12 @@ function teamsCard(origin: string, post: PostInfo, activity: string) {
   body.push({
     type: "FactSet",
     facts: [
-      { title: "Board", value: post.boardName },
+      { title: "Category", value: post.boardName },
       { title: "Status", value: STATUS_LABELS[post.status] },
+      {
+        title: "Votes",
+        value: `${post.voteCount ?? 0} ${(post.voteCount ?? 0) === 1 ? "vote" : "votes"}`,
+      },
       { title: "Author", value: post.authorName },
     ],
   });

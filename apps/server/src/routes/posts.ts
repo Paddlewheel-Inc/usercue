@@ -3,6 +3,7 @@ import { isEmptyHtml, LIMITS, SORTS, STATUSES, type Status, sanitizeHtml } from 
 import { Hono } from "hono";
 import * as v from "valibot";
 import { type CommentRow, db, type PostRow } from "../db";
+import { notifyMentions } from "../mentions";
 import { type AppEnv, rateLimit, requirePermission } from "../middleware";
 import { notifyComment, notifyNewPost, notifyStatusChange } from "../notify";
 import { publicOrigin } from "../oauth";
@@ -307,11 +308,16 @@ const findPostMeta = db.query<{
   title: string;
   body: string;
   author_name: string;
+  author_avatar: string | null;
   status: Status;
   board_name: string;
+  vote_count: number;
 }>(
-  `SELECT p.id, p.title, p.body, p.author_name, p.status, b.name AS board_name
-   FROM posts p JOIN boards b ON b.id = p.board_id
+  `SELECT p.id, p.title, p.body, p.author_name, p.status, p.vote_count, b.name AS board_name,
+          COALESCE(u.avatar_url, '') AS author_avatar
+   FROM posts p
+   JOIN boards b ON b.id = p.board_id
+   LEFT JOIN users u ON u.id = p.author_id
    WHERE p.id = ?`,
 );
 
@@ -483,20 +489,31 @@ export const posts = new Hono<AppEnv>()
         team?.staff ? team.roleIcon : null,
       );
       if (!row) return c.json({ error: "Could not create comment" }, 500);
+      const origin = publicOrigin(c);
       const meta = await findPostMeta.get(id);
       if (meta) {
         void notifyComment(
-          publicOrigin(c),
+          origin,
           {
             id,
             title: meta.title,
             body: meta.body,
             authorName: meta.author_name,
+            authorAvatar: meta.author_avatar || null,
             boardName: meta.board_name,
             status: meta.status,
+            voteCount: meta.vote_count,
           },
           serializeComment(row),
         );
+        void notifyMentions({
+          html: clean,
+          origin,
+          path: `/post/${id}`,
+          title: meta.title,
+          authorName: author,
+          authorId: team?.id ?? null,
+        });
       }
       return c.json(serializeComment(row), 201);
     },
@@ -562,7 +579,6 @@ export const posts = new Hono<AppEnv>()
         }
       }
       if (mode !== "off" && patch.assigneeId !== undefined) {
-        // change assignee
         await setAssignee.run(patch.assigneeId, id);
       }
       if (patch.tagIds !== undefined) {

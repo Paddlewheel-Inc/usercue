@@ -1,4 +1,15 @@
-import { IMAGE_WIDTH, isEmptyHtml, isPostHref, LIMITS, sanitizeHtml } from "@usercue/shared";
+import {
+  CHANGELOG_SECTIONS,
+  type ChangelogSection,
+  changelogSectionChip,
+  changelogSectionLabel,
+  IMAGE_WIDTH,
+  isEmptyHtml,
+  isPostHref,
+  LIMITS,
+  mentionChip,
+  sanitizeHtml,
+} from "@usercue/shared";
 import {
   type PointerEvent,
   type ReactNode,
@@ -9,8 +20,9 @@ import {
 } from "react";
 import { uploadImage } from "../lib/api";
 import { type EmojiMatch, emojiFor, loadEmoji, searchEmoji } from "../lib/emoji";
-import { usePosts } from "../lib/queries";
+import { usePeople, usePosts } from "../lib/queries";
 import {
+  At,
   Bold,
   BulletList,
   Hash,
@@ -22,7 +34,7 @@ import {
   NumberedList,
   Underline,
 } from "./icons";
-import { STATUS_DOT } from "./ui";
+import { Avatar, STATUS_DOT } from "./ui";
 
 interface EditorProps {
   value: string;
@@ -30,7 +42,9 @@ interface EditorProps {
   placeholder?: string;
   maxLength?: number;
   mentions?: boolean;
+  people?: boolean;
   headings?: boolean;
+  sections?: boolean;
   excludeId?: number;
   autoFocus?: boolean;
 }
@@ -80,7 +94,27 @@ function readMention(root: HTMLElement | null) {
   return { node: caret.node, start: caret.end - query.length - 1, end: caret.end, query };
 }
 
-// Skips colons that follow a word or another colon, so times and URLs are left alone.
+function readPing(root: HTMLElement | null) {
+  const caret = caretText(root);
+  const match = caret?.text.match(/(^|[\s\u00a0])@([^\s@]*)$/);
+  if (!caret || !match) return null;
+  const query = match[2] ?? "";
+  return { node: caret.node, start: caret.end - query.length - 1, end: caret.end, query };
+}
+
+function readSlash(root: HTMLElement | null) {
+  const caret = caretText(root);
+  const match = caret?.text.match(/(^|[\s\u00a0])\/([a-zA-Z]*)$/);
+  if (!caret || !match) return null;
+  const query = match[2] ?? "";
+  return { node: caret.node, start: caret.end - query.length - 1, end: caret.end, query };
+}
+
+function sectionMatches(query: string) {
+  const q = query.trim().toLowerCase();
+  return CHANGELOG_SECTIONS.filter((label) => !q || label.toLowerCase().startsWith(q));
+}
+
 function readShortcode(root: HTMLElement | null) {
   const caret = caretText(root);
   const match = caret?.text.match(/(?<![\w:]):([\w+-]+)(:?)$/);
@@ -233,7 +267,9 @@ export function Editor({
   placeholder = "Add more detail (optional)",
   maxLength = LIMITS.body,
   mentions = false,
+  people = false,
   headings = false,
+  sections = false,
   excludeId,
   autoFocus = false,
 }: EditorProps) {
@@ -242,6 +278,7 @@ export function Editor({
   const saved = useRef<Range | null>(null);
   const formatted = useRef<Element | null>(null);
   const box = useRef<HTMLDivElement>(null);
+  const picker = useRef<HTMLDivElement>(null);
   const [picked, setPicked] = useState<HTMLImageElement | null>(null);
   const [frame, setFrame] = useState<ImageFrame | null>(null);
   const [dragWidth, setDragWidth] = useState<number | null>(null);
@@ -250,8 +287,11 @@ export function Editor({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [mention, setMention] = useState<{ query: string; pinned?: boolean } | null>(null);
+  const [ping, setPing] = useState<{ query: string; pinned?: boolean } | null>(null);
+  const [slash, setSlash] = useState<{ query: string; index: number } | null>(null);
   const [emoji, setEmoji] = useState<EmojiMenu | null>(null);
   const filled = useRef(false);
+  const slashItems = slash ? sectionMatches(slash.query) : [];
 
   useLayoutEffect(() => {
     if (filled.current) return;
@@ -271,6 +311,20 @@ export function Editor({
   useEffect(() => {
     if (autoFocus) root.current?.focus();
   }, [autoFocus]);
+
+  useEffect(() => {
+    if (!ping && !mention && !slash) return;
+    function onPointer(event: Event) {
+      const target = event.target as Node | null;
+      if (!target) return;
+      if (picker.current?.contains(target)) return;
+      setPing(null);
+      setMention(null);
+      setSlash(null);
+    }
+    document.addEventListener("pointerdown", onPointer);
+    return () => document.removeEventListener("pointerdown", onPointer);
+  }, [ping, mention, slash]);
 
   useEffect(() => {
     const el = root.current;
@@ -369,6 +423,13 @@ export function Editor({
   function remember() {
     const sel = window.getSelection();
     saved.current = sel && sel.rangeCount ? sel.getRangeAt(0).cloneRange() : null;
+  }
+
+  function rememberToken(token: { node: Text; start: number; end: number }) {
+    const range = document.createRange();
+    range.setStart(token.node, token.start);
+    range.setEnd(token.node, token.end);
+    saved.current = range;
   }
 
   function restore() {
@@ -482,10 +543,9 @@ export function Editor({
     emit();
   }
 
-  function insertPostRef(id: number, title: string) {
-    const found = readMention(root.current);
+  function replaceToken(found: { node: Text; start: number; end: number } | null, html: string) {
     root.current?.focus();
-    if (found) {
+    if (found?.node.isConnected) {
       const sel = window.getSelection();
       if (sel) {
         const range = document.createRange();
@@ -497,8 +557,30 @@ export function Editor({
     } else {
       restore();
     }
-    exec("insertHTML", `<a href="/post/${id}">${escapeHtml(title)}</a>\u00a0`);
+    exec("insertHTML", html);
+  }
+
+  function insertPostRef(id: number, title: string) {
+    replaceToken(readMention(root.current), `<a href="/post/${id}">${escapeHtml(title)}</a>\u00a0`);
     setMention(null);
+    setPing(null);
+    setSlash(null);
+    emit();
+  }
+
+  function insertPerson(id: number, name: string) {
+    replaceToken(readPing(root.current), `${mentionChip(id, name)}\u00a0`);
+    setPing(null);
+    setMention(null);
+    setSlash(null);
+    emit();
+  }
+
+  function insertSection(label: ChangelogSection) {
+    replaceToken(readSlash(root.current), `${changelogSectionChip(label)}\u00a0`);
+    setSlash(null);
+    setMention(null);
+    setPing(null);
     emit();
   }
 
@@ -578,10 +660,24 @@ export function Editor({
             onClick={() => {
               remember();
               setLinking(false);
+              setPing(null);
               setMention({ query: "", pinned: true });
             }}
           >
             <Hash />
+          </Tool>
+        )}
+        {people && (
+          <Tool
+            label="Mention someone"
+            onClick={() => {
+              remember();
+              setLinking(false);
+              setMention(null);
+              setPing({ query: "", pinned: true });
+            }}
+          >
+            <At />
           </Tool>
         )}
         <Tool label="Image" onClick={() => file.current?.click()} disabled={busy}>
@@ -590,7 +686,7 @@ export function Editor({
         <input
           ref={file}
           type="file"
-          accept="image/jpeg,image/png"
+          accept="image/jpeg,image/png,image/gif"
           className="hidden"
           onChange={(e) => {
             const next = e.target.files?.[0];
@@ -622,13 +718,46 @@ export function Editor({
         </div>
       )}
 
-      {mention && (
-        <SuggestionPicker
-          query={mention.query}
-          excludeId={excludeId}
-          onPick={insertPostRef}
-          onClose={() => setMention(null)}
-        />
+      {(mention || ping || (slash && slashItems.length > 0)) && (
+        <div ref={picker}>
+          {mention && (
+            <SuggestionPicker
+              query={mention.query}
+              excludeId={excludeId}
+              focusSearch={Boolean(mention.pinned)}
+              onPick={insertPostRef}
+              onClose={() => setMention(null)}
+            />
+          )}
+
+          {ping && (
+            <PeoplePicker
+              query={ping.query}
+              focusSearch={Boolean(ping.pinned)}
+              onPick={insertPerson}
+              onClose={() => setPing(null)}
+            />
+          )}
+
+          {slash && slashItems.length > 0 && (
+            <div role="listbox" aria-label="Section" className="menu w-44 py-1">
+              {slashItems.map((label, i) => (
+                <button
+                  key={label}
+                  type="button"
+                  role="option"
+                  aria-selected={i === slash.index}
+                  className={`menu-item gap-2 ${i === slash.index ? "bg-hover text-fg" : ""}`}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => insertSection(label)}
+                >
+                  <span className={`changelog-chip ${sectionToneClass(label)}`}>{label}</span>
+                  <span className="text-faint">/{label.toLowerCase()}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       )}
 
       <div
@@ -644,7 +773,32 @@ export function Editor({
           typeEmoji(e.nativeEvent as InputEvent);
           if (mentions) {
             const found = readMention(root.current);
-            setMention((open) => (found ? { query: found.query } : open?.pinned ? open : null));
+            if (found) {
+              rememberToken(found);
+              setMention({ query: found.query });
+              setPing(null);
+            } else {
+              setMention((open) => (open?.pinned ? open : null));
+            }
+          }
+          if (people) {
+            const found = readPing(root.current);
+            if (found) {
+              rememberToken(found);
+              setPing({ query: found.query });
+              setMention(null);
+            } else {
+              setPing((open) => (open?.pinned ? open : null));
+            }
+          }
+          if (sections) {
+            const found = readSlash(root.current);
+            if (found) {
+              rememberToken(found);
+              setSlash({ query: found.query, index: 0 });
+            } else {
+              setSlash(null);
+            }
           }
           emit();
         }}
@@ -704,9 +858,34 @@ export function Editor({
             }
             if (CARET_KEYS.has(e.key)) setEmoji(null);
           }
+          if (slash && slashItems.length > 0 && !mod && !e.nativeEvent.isComposing) {
+            const count = slashItems.length;
+            if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+              e.preventDefault();
+              const step = e.key === "ArrowDown" ? 1 : count - 1;
+              setSlash({ ...slash, index: (slash.index + step) % count });
+              return;
+            }
+            if (e.key === "Enter" || e.key === "Tab") {
+              e.preventDefault();
+              const item = slashItems[slash.index];
+              if (item) insertSection(item);
+              return;
+            }
+            if (e.key === "Escape") {
+              e.preventDefault();
+              setSlash(null);
+              return;
+            }
+          }
           if (e.key === "Escape" && mention) {
             e.preventDefault();
             setMention(null);
+            return;
+          }
+          if (e.key === "Escape" && ping) {
+            e.preventDefault();
+            setPing(null);
             return;
           }
           if (!mod) return;
@@ -784,14 +963,90 @@ export function Editor({
   );
 }
 
+function sectionToneClass(label: string) {
+  switch (changelogSectionLabel(label)) {
+    case "New":
+      return "is-new";
+    case "Changed":
+      return "is-changed";
+    case "Fixed":
+      return "is-fixed";
+    case "Removed":
+      return "is-removed";
+    default:
+      return "";
+  }
+}
+
+export function PeoplePicker({
+  query,
+  focusSearch = false,
+  onPick,
+  onClose,
+}: {
+  query: string;
+  focusSearch?: boolean;
+  onPick: (id: number, name: string) => void;
+  onClose: () => void;
+}) {
+  const [q, setQ] = useState(query);
+  useEffect(() => setQ(query), [query]);
+  const { data } = usePeople(q.trim());
+  const list = data?.people ?? [];
+
+  return (
+    <div className="card overflow-hidden p-1.5">
+      <input
+        className="input h-8"
+        placeholder="Search people…"
+        value={q}
+        autoFocus={focusSearch}
+        onChange={(e) => setQ(e.target.value)}
+        onKeyDown={(e) => {
+          e.stopPropagation();
+          if (e.key === "Escape") {
+            e.preventDefault();
+            onClose();
+          }
+          if (e.key === "Enter") {
+            e.preventDefault();
+            const first = list[0];
+            if (first) onPick(first.id, first.name);
+          }
+        }}
+      />
+      <ul className="mt-1 max-h-56 overflow-y-auto">
+        {list.length === 0 && (
+          <li className="px-2.5 py-2 text-[12px] text-faint">No matching people</li>
+        )}
+        {list.map((person) => (
+          <li key={person.id}>
+            <button
+              type="button"
+              className="flex w-full items-center gap-2 rounded-xl px-2.5 py-1.5 text-left hover:bg-hover"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => onPick(person.id, person.name)}
+            >
+              <Avatar name={person.name} src={person.avatarUrl} size="xs" />
+              <span className="min-w-0 truncate text-[13px]">{person.name}</span>
+            </button>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 export function SuggestionPicker({
   query,
   excludeId,
+  focusSearch = false,
   onPick,
   onClose,
 }: {
   query: string;
   excludeId?: number;
+  focusSearch?: boolean;
   onPick: (id: number, title: string) => void;
   onClose: () => void;
 }) {
@@ -806,7 +1061,7 @@ export function SuggestionPicker({
         className="input h-8"
         placeholder="Search suggestions…"
         value={q}
-        autoFocus={query === ""}
+        autoFocus={focusSearch}
         onChange={(e) => setQ(e.target.value)}
         onKeyDown={(e) => {
           e.stopPropagation();

@@ -87,13 +87,22 @@ export const CHANGELOG_REACTIONS: { id: ChangelogReaction; label: string; emoji:
   { id: "rocket", label: "Ship", emoji: "🚀" },
 ];
 
-export const CHANGELOG_SECTIONS = ["Changed", "Fixed", "Removed"] as const;
+export const CHANGELOG_SECTIONS = ["New", "Changed", "Fixed", "Removed"] as const;
+export type ChangelogSection = (typeof CHANGELOG_SECTIONS)[number];
 
 export const CHANGELOG_LIMITS = {
-  sections: 24,
   sectionLabel: 40,
   contributors: 20,
 } as const;
+
+export function changelogSectionLabel(value: string): ChangelogSection | null {
+  const query = value.trim().toLowerCase();
+  return CHANGELOG_SECTIONS.find((label) => label.toLowerCase() === query) ?? null;
+}
+
+export function changelogSectionChip(label: ChangelogSection): string {
+  return `<span data-section="${label}" contenteditable="false">${label}</span>`;
+}
 
 export function isHexColor(value: string): boolean {
   return /^#[0-9a-fA-F]{6}$/.test(value.trim());
@@ -105,9 +114,18 @@ export const LIMITS = {
   comment: 2000,
   name: 60,
   imageBytes: 1_500_000,
+  mentions: 8,
 } as const;
 
-export { IMAGE_WIDTH, isEmptyHtml, isPostHref, sanitizeHtml, stripHtml } from "./html";
+export {
+  IMAGE_WIDTH,
+  isEmptyHtml,
+  isPostHref,
+  mentionChip,
+  parseMentionIds,
+  sanitizeHtml,
+  stripHtml,
+} from "./html";
 
 export const PERMISSIONS = [
   "dashboard",

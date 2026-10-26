@@ -2,7 +2,7 @@ import { type ReactNode, useEffect, useRef, useState } from "react";
 import { Link, useLocation, useSearch } from "wouter";
 import { useAuth, useMe } from "../lib/queries";
 import { useTheme } from "../lib/theme";
-import { ArrowUpRight, Close, Gear, Home, LogOut, Menu } from "./icons";
+import { ArrowUpRight, Close, Menu } from "./icons";
 import { ThemeToggle } from "./ThemeToggle";
 import { Avatar } from "./ui";
 
@@ -189,9 +189,6 @@ function Footer() {
   );
 }
 
-const accountItem =
-  "flex h-8 w-full items-center gap-2.5 rounded-full px-2.5 text-left text-[13px] text-muted transition-colors hover:bg-hover hover:text-fg";
-
 function AccountMenu() {
   const { data: me } = useMe();
   const { logout } = useAuth();
@@ -205,8 +202,15 @@ function AccountMenu() {
     function onPointer(event: PointerEvent) {
       if (!ref.current?.contains(event.target as Node)) setOpen(false);
     }
+    function onKey(event: KeyboardEvent) {
+      if (event.key === "Escape") setOpen(false);
+    }
     document.addEventListener("pointerdown", onPointer);
-    return () => document.removeEventListener("pointerdown", onPointer);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onPointer);
+      document.removeEventListener("keydown", onKey);
+    };
   }, [open]);
 
   if (!user) return null;
@@ -215,61 +219,64 @@ function AccountMenu() {
     <div className="relative" ref={ref}>
       <button
         type="button"
-        className={`inline-flex h-8 items-center gap-2 rounded-full pr-2.5 pl-1 text-[13px] transition-colors ${
-          open ? "bg-hover text-fg" : "text-muted hover:bg-hover hover:text-fg"
-        }`}
+        aria-label="Account menu"
         aria-expanded={open}
         aria-haspopup="menu"
+        className={`inline-flex size-8 items-center justify-center rounded-full transition-[box-shadow,transform] duration-200 ${
+          open
+            ? "scale-[1.04] shadow-[0_0_0_2px_var(--bg),0_0_0_4px_var(--accent)]"
+            : "hover:shadow-[0_0_0_2px_var(--bg),0_0_0_4px_var(--line)]"
+        }`}
         onClick={() => setOpen((value) => !value)}
       >
         <Avatar name={user.name} src={user.avatarUrl} size="sm" />
-        <span className="hidden max-w-[8rem] truncate sm:inline">{user.name}</span>
       </button>
       {open && (
         <div
           role="menu"
-          className="absolute right-0 z-30 mt-2 w-56 animate-rise rounded-[1.25rem] bg-surface p-1.5 shadow-[0_0_0_1px_var(--line),var(--shadow-lg)]"
+          className="absolute top-full left-1/2 z-30 mt-3.5 w-52 origin-top -translate-x-1/2 animate-rise overflow-hidden rounded-2xl bg-bg shadow-[0_0_0_1px_var(--line),var(--shadow)]"
         >
-          <div className="flex items-center gap-2.5 px-2 py-2">
-            <Avatar name={user.name} src={user.avatarUrl} size="md" />
-            <div className="min-w-0">
-              <p className="truncate text-[13px] font-medium text-fg">{user.name}</p>
-              <p className="truncate text-[11px] text-faint">{user.email}</p>
-            </div>
+          <div className="relative px-3 pt-3 pb-2.5 text-center">
+            <div
+              aria-hidden
+              className="pointer-events-none absolute inset-x-0 top-0 h-10 bg-[radial-gradient(90%_100%_at_50%_0%,color-mix(in_srgb,var(--accent)_12%,transparent),transparent_72%)]"
+            />
+            <p className="relative truncate text-[12px] font-medium tracking-tight text-fg">
+              {user.name}
+            </p>
+            <p className="relative truncate text-[10px] text-faint">{user.email}</p>
           </div>
-          <div className="mx-2 my-1 h-px bg-line" />
-          {user.staff && (
+          <div className="flex flex-col gap-1 px-2.5 pb-2.5">
+            {user.staff && (
+              <Link
+                href="/admin"
+                role="menuitem"
+                className="inline-flex h-7 w-full items-center justify-center rounded-full bg-hover text-[12px] font-medium text-fg transition-colors hover:bg-line"
+                onClick={() => setOpen(false)}
+              >
+                Workspace
+              </Link>
+            )}
             <Link
-              href="/admin"
+              href="/account"
               role="menuitem"
-              className={accountItem}
+              className="inline-flex h-7 w-full items-center justify-center rounded-full bg-hover text-[12px] font-medium text-fg transition-colors hover:bg-line"
               onClick={() => setOpen(false)}
             >
-              <Home className="text-faint" />
-              Workspace
+              Account
             </Link>
-          )}
-          <Link
-            href="/account"
-            role="menuitem"
-            className={accountItem}
-            onClick={() => setOpen(false)}
-          >
-            <Gear className="text-faint" />
-            Settings
-          </Link>
-          <button
-            type="button"
-            role="menuitem"
-            className={accountItem}
-            onClick={() => {
-              setOpen(false);
-              logout.mutate(undefined, { onSuccess: () => navigate("/") });
-            }}
-          >
-            <LogOut className="text-faint" />
-            Log out
-          </button>
+            <button
+              type="button"
+              role="menuitem"
+              className="inline-flex h-7 items-center justify-center rounded-full text-[11px] text-faint transition-colors hover:bg-hover hover:text-muted"
+              onClick={() => {
+                setOpen(false);
+                logout.mutate(undefined, { onSuccess: () => navigate("/") });
+              }}
+            >
+              Log out
+            </button>
+          </div>
         </div>
       )}
     </div>

@@ -16,7 +16,18 @@ import {
   useVote,
 } from "../lib/queries";
 import { Editor } from "./Editor";
-import { Check, Heart, More, Plus, Trash } from "./icons";
+import {
+  Check,
+  Heart,
+  More,
+  Plus,
+  StatusClosed,
+  StatusComplete,
+  StatusOpen,
+  StatusPlanned,
+  StatusProgress,
+  Trash,
+} from "./icons";
 import { OAuthButtons } from "./OAuthButtons";
 import { RichText } from "./RichText";
 import {
@@ -25,12 +36,19 @@ import {
   ErrorText,
   RoleBadge,
   ShareButton,
-  STATUS_DOT,
   STATUS_INK,
   StatusBadge,
   TagChip,
   VoteButton,
 } from "./ui";
+
+const STATUS_ICONS = {
+  open: StatusOpen,
+  planned: StatusPlanned,
+  in_progress: StatusProgress,
+  complete: StatusComplete,
+  closed: StatusClosed,
+} as const;
 
 interface PostDetailProps {
   id: number;
@@ -232,7 +250,6 @@ function AssigneeControl({
 }) {
   const { data: me } = useMe();
   const mode = me?.assignmentMode ?? "off";
-  // forgot this part too
   const { data: settings } = useSettings(mode !== "off" && canTriage);
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -358,36 +375,55 @@ function PostActions({
             <More />
           </button>
           {open && (
-            <div role="menu" className="menu absolute left-0 z-30 mt-1.5 w-44">
-              {STATUSES.map((item) => (
+            <div
+              role="menu"
+              className="absolute right-0 z-30 mt-2 w-52 origin-top-right animate-rise overflow-hidden rounded-2xl bg-bg shadow-[0_0_0_1px_var(--line),var(--shadow)]"
+            >
+              <div className="px-2.5 pt-2.5 pb-1.5">
+                <p className="px-2 pb-1.5 text-[10px] font-medium tracking-wide text-faint uppercase">
+                  Status
+                </p>
+                <div className="flex flex-col gap-0.5">
+                  {STATUSES.map((item) => {
+                    const Icon = STATUS_ICONS[item];
+                    const selected = item === status;
+                    return (
+                      <button
+                        key={item}
+                        type="button"
+                        role="menuitem"
+                        className={`flex h-8 w-full items-center gap-2.5 rounded-xl px-2 text-[13px] transition-colors ${
+                          selected
+                            ? "bg-hover text-fg"
+                            : "text-muted hover:bg-hover hover:text-fg"
+                        }`}
+                        onClick={() => {
+                          onStatus(item);
+                          setOpen(false);
+                        }}
+                      >
+                        <Icon width={14} height={14} className={STATUS_INK[item]} />
+                        <span className="flex-1 text-left">{STATUS_LABELS[item]}</span>
+                        {selected && <Check width={12} height={12} className="text-fg" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              <div className="border-t border-[var(--line)] px-2.5 py-2">
                 <button
-                  key={item}
                   type="button"
                   role="menuitem"
-                  className="menu-item gap-2"
+                  className="flex h-8 w-full items-center gap-2.5 rounded-xl px-2 text-[13px] text-rose-400 transition-colors hover:bg-rose-500/10 hover:text-rose-300"
                   onClick={() => {
-                    onStatus(item);
                     setOpen(false);
+                    onDelete();
                   }}
                 >
-                  <span className={`size-1.5 rounded-full ${STATUS_DOT[item]}`} />
-                  <span className="flex-1 text-left">{STATUS_LABELS[item]}</span>
-                  {item === status && <Check width={12} height={12} />}
+                  <Trash width={14} height={14} />
+                  Delete
                 </button>
-              ))}
-              <div className="my-1 border-t" />
-              <button
-                type="button"
-                role="menuitem"
-                className="menu-item gap-2 text-rose-500 hover:text-rose-500"
-                onClick={() => {
-                  setOpen(false);
-                  onDelete();
-                }}
-              >
-                <Trash width={12} height={12} />
-                Delete
-              </button>
+              </div>
             </div>
           )}
         </div>
@@ -641,7 +677,7 @@ function PostTags({
 function CommentForm({
   postId,
   parentId,
-  placeholder = "Write a comment…  Type # to reference a suggestion",
+  placeholder = "Write a comment…  @ someone, or # a suggestion",
   submitLabel = "Comment",
   autoFocus = false,
   onCancel,
@@ -693,6 +729,7 @@ function CommentForm({
         placeholder={placeholder}
         maxLength={LIMITS.comment}
         mentions
+        people
         excludeId={postId}
         autoFocus={autoFocus}
       />

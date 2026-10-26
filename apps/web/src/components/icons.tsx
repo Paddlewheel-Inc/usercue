@@ -51,6 +51,12 @@ export const Hash = (p: P) => (
     <path d="M6.2 3.5 5 12.5M11 3.5 9.8 12.5M3.5 6.2h10M3.5 9.8h10" />
   </Icon>
 );
+export const At = (p: P) => (
+  <Icon {...p}>
+    <circle cx="8" cy="8" r="2.4" />
+    <path d="M10.4 8v1.1a1.5 1.5 0 0 0 3 0V8a5.4 5.4 0 1 0-2.1 4.3" />
+  </Icon>
+);
 export const Search = (p: P) => (
   <Icon {...p}>
     <circle cx="7" cy="7" r="4.25" />

@@ -174,7 +174,7 @@ export interface ChangelogDraft {
   title: string;
   body: string;
   postId?: number | null;
-  sections: { label: string; body: string }[];
+  imageUrl?: string;
   contributorIds: number[];
 }
 
@@ -200,6 +200,14 @@ export const useChangelogPeople = (enabled = true) =>
     queryKey: ["changelog-people"],
     queryFn: () => unwrap(api.changelog.people.$get()),
     enabled,
+  });
+
+export const usePeople = (q: string, enabled = true) =>
+  useQuery({
+    queryKey: ["people", q],
+    queryFn: () => unwrap(api.people.$get({ query: { q: q || undefined } })),
+    enabled,
+    placeholderData: keepPreviousData,
   });
 
 export function useDeleteChangelogEntry(id: number) {

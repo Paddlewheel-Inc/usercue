@@ -19,6 +19,8 @@ const ALLOWED = new Set([
   "h3",
 ]);
 
+const SECTION_LABELS = ["New", "Changed", "Fixed", "Removed"] as const;
+
 export const IMAGE_WIDTH = { min: 48, max: 2000 };
 
 const ATTR = /([a-zA-Z_:][a-zA-Z0-9:._-]*)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/g;
@@ -36,7 +38,31 @@ export function stripHtml(html: string): string {
 
 export function isEmptyHtml(html: string): boolean {
   if (/<img\b/i.test(html)) return false;
+  if (/data-section\s*=/i.test(html)) return false;
+  if (/data-mention\s*=/i.test(html)) return false;
   return stripHtml(html).length === 0;
+}
+
+export function mentionChip(id: number, name: string): string {
+  const label = name.trim().slice(0, 60) || "someone";
+  const safe = label
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+  return `<span data-mention="${id}" contenteditable="false">@${safe}</span>`;
+}
+
+export function parseMentionIds(html: string): number[] {
+  const ids: number[] = [];
+  const seen = new Set<number>();
+  for (const match of html.matchAll(/<span\b[^>]*\bdata-mention="(\d+)"[^>]*>/gi)) {
+    const id = Number(match[1]);
+    if (!Number.isInteger(id) || id < 1 || seen.has(id)) continue;
+    seen.add(id);
+    ids.push(id);
+  }
+  return ids;
 }
 
 export function isPostHref(value: string): boolean {
@@ -73,14 +99,41 @@ function highlightSpan(attrs: string): boolean {
   return /background(?:-color)?\s*:/i.test(attrs);
 }
 
-function attrsFor(tag: string, raw: string): string {
-  if (tag !== "a" && tag !== "img") return "";
-  let out = "";
+function sectionLabel(attrs: string): (typeof SECTION_LABELS)[number] | null {
+  for (const match of rawAttrs(attrs)) {
+    if (match.name !== "data-section") continue;
+    const found = SECTION_LABELS.find(
+      (label) => label.toLowerCase() === match.value.trim().toLowerCase(),
+    );
+    return found ?? null;
+  }
+  return null;
+}
+
+function mentionId(attrs: string): number | null {
+  for (const match of rawAttrs(attrs)) {
+    if (match.name !== "data-mention") continue;
+    const id = Number(match.value.trim());
+    if (Number.isInteger(id) && id >= 1) return id;
+  }
+  return null;
+}
+
+function rawAttrs(raw: string) {
+  const out: { name: string; value: string }[] = [];
   ATTR.lastIndex = 0;
   for (const match of raw.matchAll(ATTR)) {
     const name = (match[1] ?? "").toLowerCase();
-    const value = match[2] ?? match[3] ?? match[4] ?? "";
     if (!name) continue;
+    out.push({ name, value: match[2] ?? match[3] ?? match[4] ?? "" });
+  }
+  return out;
+}
+
+function attrsFor(tag: string, raw: string): string {
+  if (tag !== "a" && tag !== "img") return "";
+  let out = "";
+  for (const { name, value } of rawAttrs(raw)) {
     if (tag === "a" && name === "href") {
       const href = safeHref(value);
       if (href && isPostHref(href)) out += ` href="${href}"`;
@@ -163,6 +216,24 @@ export function sanitizeHtml(input: string): string {
 
     let tag = name;
     if (name === "span") {
+      const section = sectionLabel(attrStr);
+      if (section) {
+        const endTag = "</span>";
+        const end = input.toLowerCase().indexOf(endTag, i);
+        i = end === -1 ? input.length : end + endTag.length;
+        out += `<span data-section="${section}" contenteditable="false">${section}</span>`;
+        continue;
+      }
+      const ping = mentionId(attrStr);
+      if (ping) {
+        const endTag = "</span>";
+        const end = input.toLowerCase().indexOf(endTag, i);
+        const inner = end === -1 ? "" : input.slice(i, end);
+        i = end === -1 ? input.length : end + endTag.length;
+        const label = stripHtml(inner).replace(/^@+/, "").trim().slice(0, 60);
+        out += mentionChip(ping, label || "someone");
+        continue;
+      }
       if (!highlightSpan(attrStr)) continue;
       tag = "mark";
     } else if (!ALLOWED.has(name)) {

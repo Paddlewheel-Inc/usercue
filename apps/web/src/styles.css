@@ -331,6 +331,52 @@
   color: inherit;
   padding: 0 0.12em;
 }
+.changelog-chip,
+.rich span[data-section] {
+  display: inline-flex;
+  align-items: center;
+  height: 1.35em;
+  margin-right: 0.35em;
+  padding: 0 0.55em;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1;
+  vertical-align: 0.05em;
+  user-select: none;
+  background: color-mix(in srgb, var(--fg) 8%, transparent);
+  color: var(--muted);
+}
+.changelog-chip.is-new,
+.rich span[data-section="New"] {
+  background: color-mix(in srgb, #a78bfa 18%, transparent);
+  color: #c4b5fd;
+}
+.changelog-chip.is-changed,
+.rich span[data-section="Changed"] {
+  background: color-mix(in srgb, #38bdf8 18%, transparent);
+  color: #7dd3fc;
+}
+.changelog-chip.is-fixed,
+.rich span[data-section="Fixed"] {
+  background: color-mix(in srgb, #34d399 18%, transparent);
+  color: #6ee7b7;
+}
+.changelog-chip.is-removed,
+.rich span[data-section="Removed"] {
+  background: color-mix(in srgb, #fb7185 18%, transparent);
+  color: #fda4af;
+}
+.rich span[data-mention] {
+  display: inline;
+  margin: 0 0.05em;
+  padding: 0.05em 0.35em;
+  border-radius: 0.4em;
+  font-weight: 500;
+  user-select: none;
+  background: var(--accent-soft);
+  color: var(--accent-text);
+}
 .rich p,
 .rich div {
   margin: 0;

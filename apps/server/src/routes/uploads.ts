@@ -8,6 +8,7 @@ import { type AppEnv, randomToken, rateLimit } from "../middleware";
 const TYPES: Record<string, string> = {
   "image/jpeg": "jpg",
   "image/png": "png",
+  "image/gif": "gif",
   "image/svg+xml": "svg",
 };
 
@@ -22,7 +23,7 @@ export const uploads = new Hono<AppEnv>()
     if (!(file instanceof File)) return c.json({ error: "Choose an image to upload" }, 400);
 
     const ext = TYPES[file.type];
-    if (!ext) return c.json({ error: "Use a JPEG, PNG, or SVG image" }, 400);
+    if (!ext) return c.json({ error: "Use a JPEG, PNG, GIF, or SVG image" }, 400);
     if (file.size > LIMITS.imageBytes) {
       return c.json({ error: "Image is too large (max 1.5 MB)" }, 400);
     }

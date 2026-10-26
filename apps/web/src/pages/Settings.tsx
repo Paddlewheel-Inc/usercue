@@ -649,7 +649,8 @@ function BrandingSettings() {
       <section className="flex flex-col gap-3">
         <SectionHead title="Link preview">
           The image shown when someone shares a link to the board in chat or on social media. Posts
-          and changelog entries get their own card. 1200 by 630 works best.
+          get their own card. Changelog updates can set a custom image, or use an automatic card.
+          1200 by 630 works best.
         </SectionHead>
         <ImageSlot
           label="Image"
