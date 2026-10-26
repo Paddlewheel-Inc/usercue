@@ -275,11 +275,6 @@ function PublishedEntry({
             </div>
           )}
         </div>
-        {entry.imageUrl && (
-          <div className="mt-4 overflow-hidden rounded-2xl bg-hover">
-            <img src={entry.imageUrl} alt="" className="aspect-[1200/630] w-full object-cover" />
-          </div>
-        )}
         {entry.linkedPost && (
           <p className="mt-3">
             <PostLink id={entry.linkedPost.id} title={entry.linkedPost.title} />
@@ -337,8 +332,8 @@ function BannerField({ value, onChange }: { value: string; onChange: (url: strin
       <div>
         <p className="text-[12px] font-medium text-muted">Link preview image</p>
         <p className="mt-0.5 text-[12px] text-faint">
-          Shown when someone shares this update. 1200 by 630 works best. Leave empty to use the
-          automatic card.
+          Thumbnail for Discord, Slack, and other link embeds — not shown on the page. 1200×630
+          works best. Leave empty to use the automatic card.
         </p>
       </div>
       <div className="flex items-center gap-3">
