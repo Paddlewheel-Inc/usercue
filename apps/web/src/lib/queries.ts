@@ -389,6 +389,13 @@ export function useSaveSettings() {
       resendEnabled?: boolean;
       resendFrom?: string;
       resendApiKey?: string;
+      smtpHost?: string;
+      smtpEnabled?: boolean;
+      smtpPort?: number;
+      smtpUser?: string;
+      smtpPass?: string;
+      smtpFrom?: string;
+      smtpSecure?: boolean;
       discordEnabled?: boolean;
       discordWebhookUrl?: string;
       teamsEnabled?: boolean;

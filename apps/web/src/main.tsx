@@ -4,6 +4,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
 import { Pwa } from "./components/Pwa";
+import { ToastProvider } from "./components/ui";
 import { applyTheme, getTheme } from "./lib/theme";
 import "./styles.css";
 
@@ -19,8 +20,10 @@ if (!root) throw new Error("Missing #root element");
 createRoot(root).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
-      <App />
-      <Pwa />
+      <ToastProvider>
+        <App />
+        <Pwa />
+      </ToastProvider>
     </QueryClientProvider>
   </StrictMode>,
 );

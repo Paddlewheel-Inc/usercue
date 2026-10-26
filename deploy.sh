@@ -222,9 +222,9 @@ services:
       - 1.1.1.1
       - 8.8.8.8
     ports:
-      - "80:80"
-      - "443:443"
-      - "443:443/udp"
+      - "81:81"
+      - "445:445"
+      - "445:445/udp"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data

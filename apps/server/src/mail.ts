@@ -1,5 +1,6 @@
 import { env } from "./env";
 import { decryptSecret } from "./secret";
+import { sendSmtpEmail, smtpEnabled } from "./smtp";
 import { getWorkspace } from "./workspace";
 
 export async function resendCredentials(): Promise<{ key: string; from: string } | null> {
@@ -25,29 +26,37 @@ async function sendEmail(options: {
   html: string;
 }): Promise<{ sent: boolean; error?: string }> {
   const creds = await resendCredentials();
-  if (!creds || (await getWorkspace()).resend_enabled !== 1) {
-    return { sent: false, error: "Email is turned off" };
+  if (creds && (await getWorkspace()).resend_enabled === 1) {
+    const res = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${creds.key}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        from: creds.from,
+        to: options.to,
+        subject: options.subject,
+        html: options.html,
+      }),
+    });
+
+    if (!res.ok) {
+      const body = (await res.json().catch(() => null)) as { message?: string } | null;
+      return { sent: false, error: body?.message ?? "Could not send the email" };
+    }
+    return { sent: true };
   }
 
-  const res = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${creds.key}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      from: creds.from,
+  if (await smtpEnabled()) {
+    return sendSmtpEmail({
       to: options.to,
       subject: options.subject,
       html: options.html,
-    }),
-  });
-
-  if (!res.ok) {
-    const body = (await res.json().catch(() => null)) as { message?: string } | null;
-    return { sent: false, error: body?.message ?? "Could not send the email" };
+    });
   }
-  return { sent: true };
+
+  return { sent: false, error: "Email is turned off" };
 }
 
 export async function sendInviteEmail(
