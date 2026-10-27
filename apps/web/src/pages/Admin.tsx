@@ -8,7 +8,18 @@ import {
   useState,
 } from "react";
 import { Link, useLocation, useParams, useSearch } from "wouter";
-import { Gear, Heart, Inbox, LogOut, Menu, Pen, Plus, Roadmap, Search } from "../components/icons";
+import {
+  Gear,
+  Heart,
+  Inbox,
+  LogOut,
+  Menu,
+  Pen,
+  Plus,
+  Roadmap,
+  Search,
+  Trash,
+} from "../components/icons";
 import { NotificationBell } from "../components/NotificationBell";
 import { PostDetail } from "../components/PostDetail";
 import { PostRow } from "../components/PostRow";
@@ -21,6 +32,7 @@ import {
   useBoards,
   useCounts,
   useCreateBoard,
+  useDeleteBoard,
   useMe,
   usePosts,
   useRenameBoard,
@@ -74,7 +86,9 @@ function SidebarLink({
           : "text-muted hover:bg-hover hover:text-fg"
       }`}
     >
-      <span className="flex min-w-0 flex-1 items-center gap-2.5">{children}</span>
+      <span className="flex min-w-0 flex-1 items-center gap-2.5">
+        {children}
+      </span>
       {count !== undefined && (
         <span
           className={`w-7 shrink-0 text-right text-[11px] tabular-nums ${
@@ -91,7 +105,9 @@ function SidebarLink({
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
     <nav className="flex flex-col gap-0.5">
-      <p className="px-2.5 pt-4 pb-1.5 text-[11px] font-medium text-faint">{title}</p>
+      <p className="px-2.5 pt-4 pb-1.5 text-[11px] font-medium text-faint">
+        {title}
+      </p>
       {children}
     </nav>
   );
@@ -115,7 +131,9 @@ function Sidebar({
   const { data: counts } = useCounts(filter.board);
   const { logout } = useAuth();
   const [, navigate] = useLocation();
-  const total = counts ? Object.values(counts).reduce((a, b) => a + b, 0) : undefined;
+  const total = counts
+    ? Object.values(counts).reduce((a, b) => a + b, 0)
+    : undefined;
   const allActive = !dashboard && !settings && !filter.status;
 
   useEffect(() => {
@@ -142,7 +160,11 @@ function Sidebar({
           className="pointer-events-none absolute inset-x-0 top-0 h-24 rounded-t-[1.75rem] bg-[radial-gradient(ellipse_at_top,color-mix(in_srgb,var(--accent)_16%,transparent),transparent_72%)]"
         />
 
-        <Link href="/" aria-label="Usercue" className="relative mb-5 flex justify-center pt-1">
+        <Link
+          href="/"
+          aria-label="Usercue"
+          className="relative mb-5 flex justify-center pt-1"
+        >
           <span className="scale-125">
             <Logo wordmark={false} />
           </span>
@@ -158,7 +180,11 @@ function Sidebar({
         </SidebarLink>
 
         <Section title="The pile">
-          <SidebarLink to={href({ board: filter.board })} active={allActive} count={total}>
+          <SidebarLink
+            to={href({ board: filter.board })}
+            active={allActive}
+            count={total}
+          >
             <Inbox className={allActive ? "text-accent" : "text-faint"} /> All
           </SidebarLink>
           {STATUSES.map((status) => {
@@ -185,7 +211,11 @@ function Sidebar({
           })}
         </Section>
 
-        <BoardsNav filter={filter} boards={boards} muted={dashboard || settings} />
+        <BoardsNav
+          filter={filter}
+          boards={boards}
+          muted={dashboard || settings}
+        />
 
         <Section title="The shop">
           <SidebarLink to="/roadmap" active={false}>
@@ -198,7 +228,8 @@ function Sidebar({
             can(me, "manage_users") ||
             can(me, "manage_roles")) && (
             <SidebarLink to="/admin/settings" active={settings}>
-              <Gear className={settings ? "text-accent" : "text-faint"} /> Settings
+              <Gear className={settings ? "text-accent" : "text-faint"} />{" "}
+              Settings
             </SidebarLink>
           )}
         </Section>
@@ -206,19 +237,29 @@ function Sidebar({
         <div className="relative mt-auto flex flex-col gap-1 pt-3">
           <ThemeToggle labeled />
           <div className="flex items-center gap-2 rounded-full px-2 py-1.5">
-            <Avatar name={me?.user?.name ?? "?"} src={me?.user?.avatarUrl} size="sm" />
+            <Avatar
+              name={me?.user?.name ?? "?"}
+              src={me?.user?.avatarUrl}
+              size="sm"
+            />
             <span className="min-w-0 flex-1 truncate text-[13px] font-medium">
               {me?.user?.name}
             </span>
             {me?.user?.staff && me.user.roleName && (
-              <RoleBadge name={me.user.roleName} iconUrl={me.user.roleIcon} size="xs" />
+              <RoleBadge
+                name={me.user.roleName}
+                iconUrl={me.user.roleIcon}
+                size="xs"
+              />
             )}
             <NotificationBell placement="up" />
             <button
               type="button"
               className="inline-flex size-7 items-center justify-center rounded-full text-faint transition-colors hover:bg-hover hover:text-fg"
               aria-label="Sign out"
-              onClick={() => logout.mutate(undefined, { onSuccess: () => navigate("/") })}
+              onClick={() =>
+                logout.mutate(undefined, { onSuccess: () => navigate("/") })
+              }
             >
               <LogOut />
             </button>
@@ -241,6 +282,8 @@ function BoardRow({
   canRename: boolean;
 }) {
   const rename = useRenameBoard();
+  const remove = useDeleteBoard();
+  const [, navigate] = useLocation();
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(board.name);
   const done = useRef(false);
@@ -254,7 +297,10 @@ function BoardRow({
       setValue(board.name);
       return;
     }
-    rename.mutate({ slug: board.slug, name: next }, { onError: () => setValue(board.name) });
+    rename.mutate(
+      { slug: board.slug, name: next },
+      { onError: () => setValue(board.name) },
+    );
   }
 
   if (editing) {
@@ -287,7 +333,11 @@ function BoardRow({
 
   return (
     <div className="group relative">
-      <SidebarLink to={href} active={active} className={canRename ? "pr-8" : ""}>
+      <SidebarLink
+        to={href}
+        active={active}
+        className={canRename ? "pr-8" : ""}
+      >
         <span
           className="size-1.5 shrink-0 rounded-full"
           style={{ background: `hsl(${hueFor(board.name)} 45% 52%)` }}
@@ -295,22 +345,40 @@ function BoardRow({
         <span className="truncate">{board.name}</span>
       </SidebarLink>
       {canRename && (
-        <button
-          type="button"
-          aria-label={`Rename ${board.name}`}
-          className={`absolute top-1/2 right-1.5 inline-flex size-6 -translate-y-1/2 items-center justify-center rounded-full transition-opacity focus-visible:opacity-100 ${
+        <div
+          className={`absolute top-1/2 right-1.5 flex -translate-y-1/2 rounded-full transition-opacity focus-within:opacity-100 ${
             active
-              ? "text-accent-text/70 hover:bg-accent-text/10 hover:text-accent-text"
-              : "text-faint opacity-0 group-hover:opacity-100 hover:bg-hover hover:text-fg"
+              ? "text-accent-text/70"
+              : "text-faint opacity-0 group-hover:opacity-100"
           }`}
-          onClick={() => {
-            done.current = false;
-            setValue(board.name);
-            setEditing(true);
-          }}
         >
-          <Pen width={12} height={12} />
-        </button>
+          <button
+            type="button"
+            aria-label={`Rename ${board.name}`}
+            className="inline-flex size-6 items-center justify-center rounded-full hover:bg-hover hover:text-fg"
+            onClick={() => {
+              done.current = false;
+              setValue(board.name);
+              setEditing(true);
+            }}
+          >
+            <Pen width={12} height={12} />
+          </button>
+          <button
+            type="button"
+            aria-label={`Delete ${board.name}`}
+            className="inline-flex size-6 items-center justify-center rounded-full hover:bg-rose-500/10 hover:text-rose-600"
+            disabled={remove.isPending}
+            onClick={() => {
+              if (
+                confirm(`Delete the ${board.name} board and all its requests?`)
+              )
+                remove.mutate(board.slug);
+            }}
+          >
+            <Trash width={12} height={12} />
+          </button>
+        </div>
       )}
     </div>
   );
@@ -380,7 +448,13 @@ function BoardsNav({
   );
 }
 
-function RequestList({ filter, selected }: { filter: Filter; selected?: number }) {
+function RequestList({
+  filter,
+  selected,
+}: {
+  filter: Filter;
+  selected?: number;
+}) {
   const [search, setSearch] = useState("");
   const q = useDeferredValue(search.trim());
   const { data: posts, isLoading } = usePosts({
@@ -403,7 +477,9 @@ function RequestList({ filter, selected }: { filter: Filter; selected?: number }
         <h2 className="flex items-baseline gap-2 text-[15px] font-semibold tracking-tight">
           {filter.status ? STATUS_LABELS[filter.status] : "Requests"}
           {shown !== undefined && (
-            <span className="text-[13px] font-medium text-faint tabular-nums">{shown}</span>
+            <span className="text-[13px] font-medium text-faint tabular-nums">
+              {shown}
+            </span>
           )}
         </h2>
       </header>
@@ -510,7 +586,11 @@ export function Admin() {
             >
               ← Back
             </Link>
-            <PostDetail key={selected} id={selected} onDeleted={() => navigate(href(filter))} />
+            <PostDetail
+              key={selected}
+              id={selected}
+              onDeleted={() => navigate(href(filter))}
+            />
           </div>
         ) : (
           <div className="flex h-full items-center justify-center">

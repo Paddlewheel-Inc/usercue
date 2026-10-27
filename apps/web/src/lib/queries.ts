@@ -305,6 +305,19 @@ export function useRenameBoard() {
   });
 }
 
+export function useDeleteBoard() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (slug: string) => unwrap(api.boards[":slug"].$delete({ param: { slug } })),
+    onSuccess: () =>
+      Promise.all([
+        qc.invalidateQueries({ queryKey: ["boards"] }),
+        qc.invalidateQueries({ queryKey: ["posts"] }),
+        qc.invalidateQueries({ queryKey: ["counts"] }),
+      ]),
+  });
+}
+
 function refreshTags(qc: ReturnType<typeof useQueryClient>) {
   return Promise.all([
     qc.invalidateQueries({ queryKey: ["tags"] }),
