@@ -11,7 +11,8 @@ import { Editor, SuggestionPicker } from "../components/Editor";
 import { ChevronLeft, Close, Comment, Hash, Pencil, Plus, Trash } from "../components/icons";
 import { OAuthButtons } from "../components/OAuthButtons";
 import { PostLink, RichText } from "../components/RichText";
-import { Avatar, Empty, ErrorText, RoleBadge } from "../components/ui";
+import { Avatar, Empty, ErrorText, PeopleCard, RoleBadge, useHoverCard } from "../components/ui";
+import { useCommentAnchor } from "../lib/anchor";
 import { type ChangelogComment, type ChangelogEntry, uploadImage } from "../lib/api";
 import { longDate, timeAgo } from "../lib/format";
 import {
@@ -158,6 +159,7 @@ function EntryPage({ id }: { id: number }) {
   const remove = useDeleteChangelogEntry(id);
   const [, navigate] = useLocation();
   const [editing, setEditing] = useState(false);
+  useCommentAnchor(Boolean(data));
 
   if (!me?.changelogEnabled && !staff) return <Empty title="Changelog isn't available" />;
   if (isLoading) return null;
@@ -591,6 +593,54 @@ function EntryForm({
   );
 }
 
+function ReactionButton({
+  item,
+  row,
+  disabled,
+  onPress,
+}: {
+  item: (typeof CHANGELOG_REACTIONS)[number];
+  row: ChangelogEntry["reactions"][number] | undefined;
+  disabled: boolean;
+  onPress: () => void;
+}) {
+  const hover = useHoverCard();
+  const mine = Boolean(row?.mine);
+  const count = row?.count ?? 0;
+  const people = row?.people ?? [];
+  const hidden = Math.max(count - people.length, 0);
+
+  return (
+    <>
+      <button
+        type="button"
+        aria-pressed={mine}
+        aria-label={item.label}
+        disabled={disabled}
+        {...(count > 0 ? hover.bind : {})}
+        onClick={onPress}
+        className={`inline-flex h-7 items-center gap-1 rounded-full px-2.5 text-[12px] transition-colors ${
+          mine
+            ? "bg-accent-soft font-medium text-fg"
+            : "bg-hover/70 text-muted hover:bg-hover hover:text-fg"
+        }`}
+      >
+        <span aria-hidden>{item.emoji}</span>
+        <span>{item.label}</span>
+        {count > 0 && <span className="tabular-nums text-faint">{count}</span>}
+      </button>
+      {count > 0 && hover.anchor && (
+        <PeopleCard
+          anchor={hover.anchor}
+          title={`${item.emoji} ${item.label}`}
+          people={people}
+          footer={hidden > 0 ? `+${hidden} more` : undefined}
+        />
+      )}
+    </>
+  );
+}
+
 function Reactions({ id, reactions }: { id: number; reactions: ChangelogEntry["reactions"] }) {
   const { data: me } = useMe();
   const react = useChangelogReaction(id);
@@ -601,36 +651,21 @@ function Reactions({ id, reactions }: { id: number; reactions: ChangelogEntry["r
   return (
     <div className="flex flex-col gap-2">
       <div className="flex flex-wrap gap-1.5">
-        {CHANGELOG_REACTIONS.map((item) => {
-          const row = reactions.find((reaction) => reaction.id === item.id);
-          const mine = Boolean(row?.mine);
-          const count = row?.count ?? 0;
-          return (
-            <button
-              key={item.id}
-              type="button"
-              aria-pressed={mine}
-              aria-label={item.label}
-              disabled={react.isPending || suspended}
-              onClick={() => {
-                if (!user) {
-                  setNeedSignIn(true);
-                  return;
-                }
-                react.mutate(item.id as ChangelogReaction);
-              }}
-              className={`inline-flex h-7 items-center gap-1 rounded-full px-2.5 text-[12px] transition-colors ${
-                mine
-                  ? "bg-accent-soft font-medium text-fg"
-                  : "bg-hover/70 text-muted hover:bg-hover hover:text-fg"
-              }`}
-            >
-              <span aria-hidden>{item.emoji}</span>
-              <span>{item.label}</span>
-              {count > 0 && <span className="tabular-nums text-faint">{count}</span>}
-            </button>
-          );
-        })}
+        {CHANGELOG_REACTIONS.map((item) => (
+          <ReactionButton
+            key={item.id}
+            item={item}
+            row={reactions.find((reaction) => reaction.id === item.id)}
+            disabled={react.isPending || suspended}
+            onPress={() => {
+              if (!user) {
+                setNeedSignIn(true);
+                return;
+              }
+              react.mutate(item.id as ChangelogReaction);
+            }}
+          />
+        ))}
       </div>
       {needSignIn && (
         <p className="text-[12px] text-muted">
@@ -668,7 +703,7 @@ function Comments({ id, comments }: { id: number; comments: ChangelogComment[] }
 function CommentItem({ entryId, comment }: { entryId: number; comment: ChangelogComment }) {
   const remove = useDeleteChangelogComment(entryId);
   return (
-    <li className="flex gap-3">
+    <li id={`comment-${comment.id}`} className="flex scroll-mt-24 gap-3 rounded-xl">
       <Avatar
         name={comment.authorName}
         src={comment.authorAvatar}

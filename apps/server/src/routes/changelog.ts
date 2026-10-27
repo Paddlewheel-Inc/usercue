@@ -104,6 +104,20 @@ interface ReactionRow {
   entry_id: number;
   reaction: string;
   user_id: number;
+  name: string;
+  avatar_url: string | null;
+}
+
+interface ReactionPerson {
+  name: string;
+  avatarUrl: string | null;
+}
+
+interface PackedReaction {
+  id: ChangelogReaction;
+  count: number;
+  mine: boolean;
+  people: ReactionPerson[];
 }
 
 interface SectionRow {
@@ -188,10 +202,17 @@ const insertComment = db.query<{ id: number }>(
 const deleteComment = db.query("DELETE FROM changelog_comments WHERE id = ? AND entry_id = ?");
 
 const listReactions = db.query<ReactionRow>(
-  "SELECT entry_id, reaction, user_id FROM changelog_reactions",
+  `SELECT r.entry_id, r.reaction, r.user_id, u.name, u.avatar_url
+   FROM changelog_reactions r
+   JOIN users u ON u.id = r.user_id
+   ORDER BY r.created_at, r.user_id`,
 );
 const reactionsFor = db.query<ReactionRow>(
-  "SELECT entry_id, reaction, user_id FROM changelog_reactions WHERE entry_id = ?",
+  `SELECT r.entry_id, r.reaction, r.user_id, u.name, u.avatar_url
+   FROM changelog_reactions r
+   JOIN users u ON u.id = r.user_id
+   WHERE r.entry_id = ?
+   ORDER BY r.created_at, r.user_id`,
 );
 const removeReaction = db.query<{ entry_id: number }>(
   `DELETE FROM changelog_reactions
@@ -243,21 +264,28 @@ function cleanBody(html: string) {
   return isEmptyHtml(clean) ? "" : clean;
 }
 
-function packReactions(rows: ReactionRow[], userId: number | null, enabled: boolean) {
+function packReactions(
+  rows: ReactionRow[],
+  userId: number | null,
+  enabled: boolean,
+): PackedReaction[] {
   if (!enabled) return [];
   const known = new Set<string>(CHANGELOG_REACTION_IDS);
-  const counts = new Map<string, { count: number; mine: boolean }>();
+  const counts = new Map<string, { count: number; mine: boolean; people: ReactionPerson[] }>();
   for (const row of rows) {
     if (!known.has(row.reaction)) continue;
-    const current = counts.get(row.reaction) ?? { count: 0, mine: false };
+    const current = counts.get(row.reaction) ?? { count: 0, mine: false, people: [] };
     current.count += 1;
     if (userId !== null && row.user_id === userId) current.mine = true;
+    if (current.people.length < 12) {
+      current.people.push({ name: row.name, avatarUrl: row.avatar_url || null });
+    }
     counts.set(row.reaction, current);
   }
   return CHANGELOG_REACTION_IDS.flatMap((id) => {
     const row = counts.get(id);
     if (!row) return [];
-    return [{ id, count: row.count, mine: row.mine }];
+    return [{ id, count: row.count, mine: row.mine, people: row.people }];
   });
 }
 
@@ -299,7 +327,7 @@ function entryBodyHtml(body: string, sections: SectionRow[]) {
 
 function serializeEntry(
   row: EntryRow,
-  reactions: { id: ChangelogReaction; count: number; mine: boolean }[],
+  reactions: PackedReaction[],
   commentsOn: boolean,
   sections: SectionRow[],
   contributors: ContributorRow[],
@@ -615,10 +643,12 @@ export const changelog = new Hono<AppEnv>()
         void notifyMentions({
           html: clean,
           origin: publicOrigin(c),
-          path: `/changelog/${id}#comments`,
+          path: `/changelog/${id}`,
+          commentId: row.id,
           title: entry.title,
           authorName: user.name,
           authorId: user.id,
+          authorStaff: user.staff,
         });
       }
       return c.json(serializeComment(row, { id: user.id, staff: user.staff }), 201);

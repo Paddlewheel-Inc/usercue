@@ -3,6 +3,7 @@ import { Link, useLocation, useSearch } from "wouter";
 import { useAuth, useMe } from "../lib/queries";
 import { useTheme } from "../lib/theme";
 import { ArrowUpRight, Close, Menu } from "./icons";
+import { NotificationBell } from "./NotificationBell";
 import { ThemeToggle } from "./ThemeToggle";
 import { Avatar } from "./ui";
 
@@ -311,7 +312,10 @@ export function PublicLayout({ children, wide = false }: { children: ReactNode; 
           <div className="flex-1" />
           <ThemeToggle />
           {me?.user ? (
-            <AccountMenu />
+            <>
+              <NotificationBell />
+              <AccountMenu />
+            </>
           ) : (
             <Link
               href="/signin"

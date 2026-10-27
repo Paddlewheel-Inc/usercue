@@ -39,30 +39,47 @@ export function stripHtml(html: string): string {
 export function isEmptyHtml(html: string): boolean {
   if (/<img\b/i.test(html)) return false;
   if (/data-section\s*=/i.test(html)) return false;
-  if (/data-mention\s*=/i.test(html)) return false;
+  if (/data-mention(?:-role)?\s*=/i.test(html)) return false;
   return stripHtml(html).length === 0;
 }
 
-export function mentionChip(id: number, name: string): string {
-  const label = name.trim().slice(0, 60) || "someone";
-  const safe = label
+function escapeLabel(value: string): string {
+  return value
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
-  return `<span data-mention="${id}" contenteditable="false">@${safe}</span>`;
 }
 
-export function parseMentionIds(html: string): number[] {
+export function mentionChip(id: number, name: string): string {
+  const label = name.trim().slice(0, 60) || "someone";
+  return `<span data-mention="${id}" contenteditable="false">@${escapeLabel(label)}</span>`;
+}
+
+export function roleMentionChip(id: number, name: string): string {
+  const label = name.trim().slice(0, 60) || "role";
+  return `<span data-mention-role="${id}" contenteditable="false">@${escapeLabel(label)}</span>`;
+}
+
+function parseIds(html: string, attribute: string): number[] {
   const ids: number[] = [];
   const seen = new Set<number>();
-  for (const match of html.matchAll(/<span\b[^>]*\bdata-mention="(\d+)"[^>]*>/gi)) {
+  const pattern = new RegExp(`<span\\b[^>]*\\b${attribute}="(\\d+)"[^>]*>`, "gi");
+  for (const match of html.matchAll(pattern)) {
     const id = Number(match[1]);
     if (!Number.isInteger(id) || id < 1 || seen.has(id)) continue;
     seen.add(id);
     ids.push(id);
   }
   return ids;
+}
+
+export function parseMentionIds(html: string): number[] {
+  return parseIds(html, "data-mention");
+}
+
+export function parseRoleMentionIds(html: string): number[] {
+  return parseIds(html, "data-mention-role");
 }
 
 export function isPostHref(value: string): boolean {
@@ -110,9 +127,9 @@ function sectionLabel(attrs: string): (typeof SECTION_LABELS)[number] | null {
   return null;
 }
 
-function mentionId(attrs: string): number | null {
+function mentionId(attrs: string, attribute = "data-mention"): number | null {
   for (const match of rawAttrs(attrs)) {
-    if (match.name !== "data-mention") continue;
+    if (match.name !== attribute) continue;
     const id = Number(match.value.trim());
     if (Number.isInteger(id) && id >= 1) return id;
   }
@@ -232,6 +249,16 @@ export function sanitizeHtml(input: string): string {
         i = end === -1 ? input.length : end + endTag.length;
         const label = stripHtml(inner).replace(/^@+/, "").trim().slice(0, 60);
         out += mentionChip(ping, label || "someone");
+        continue;
+      }
+      const rolePing = mentionId(attrStr, "data-mention-role");
+      if (rolePing) {
+        const endTag = "</span>";
+        const end = input.toLowerCase().indexOf(endTag, i);
+        const inner = end === -1 ? "" : input.slice(i, end);
+        i = end === -1 ? input.length : end + endTag.length;
+        const label = stripHtml(inner).replace(/^@+/, "").trim().slice(0, 60);
+        out += roleMentionChip(rolePing, label || "role");
         continue;
       }
       if (!highlightSpan(attrStr)) continue;

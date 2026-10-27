@@ -57,6 +57,12 @@ export const At = (p: P) => (
     <path d="M10.4 8v1.1a1.5 1.5 0 0 0 3 0V8a5.4 5.4 0 1 0-2.1 4.3" />
   </Icon>
 );
+export const Bell = (p: P) => (
+  <Icon {...p}>
+    <path d="M3.8 11.2h8.4c-.9-.9-1.4-1.9-1.4-3.4V6.6a2.8 2.8 0 0 0-5.6 0v1.2c0 1.5-.5 2.5-1.4 3.4z" />
+    <path d="M6.6 13.2a1.5 1.5 0 0 0 2.8 0" />
+  </Icon>
+);
 export const Search = (p: P) => (
   <Icon {...p}>
     <circle cx="7" cy="7" r="4.25" />

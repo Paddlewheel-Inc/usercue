@@ -56,7 +56,13 @@ export function PostRow({ post, href, active = false, compact = false, index = 0
             )}
           </div>
         </div>
-        <VoteButton compact count={post.voteCount} voted={post.voted} onClick={toggle} />
+        <VoteButton
+          compact
+          postId={post.id}
+          count={post.voteCount}
+          voted={post.voted}
+          onClick={toggle}
+        />
       </Link>
     );
   }
@@ -67,7 +73,7 @@ export function PostRow({ post, href, active = false, compact = false, index = 0
       style={delay}
       className="card lift flex w-full min-w-0 animate-in items-center gap-3 px-3.5 py-3.5"
     >
-      <VoteButton count={post.voteCount} voted={post.voted} onClick={toggle} />
+      <VoteButton postId={post.id} count={post.voteCount} voted={post.voted} onClick={toggle} />
       <div className="min-w-0 flex-1">
         <div className="truncate text-[13px] font-medium">{post.title}</div>
         {post.tags.length > 0 && (

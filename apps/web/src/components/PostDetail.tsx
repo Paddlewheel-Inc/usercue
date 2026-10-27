@@ -1,11 +1,13 @@
 import { LIMITS, STATUS_LABELS, STATUSES, type Status, tagColorHex } from "@usercue/shared";
 import { type FormEvent, useEffect, useRef, useState } from "react";
+import { useCommentAnchor } from "../lib/anchor";
 import type { Comment } from "../lib/api";
 import { getSavedName, saveName, timeAgo } from "../lib/format";
 import {
   can,
   useAddComment,
   useAuthMethods,
+  useBoards,
   useDeleteComment,
   useDeletePost,
   useMe,
@@ -61,6 +63,7 @@ export function PostDetail({ id, onDeleted }: PostDetailProps) {
   const vote = useVote();
   const update = useUpdatePost(id);
   const remove = useDeletePost(id);
+  useCommentAnchor(Boolean(post));
 
   if (isLoading) return null;
   if (!post) return <Empty title="Post not found" />;
@@ -90,6 +93,7 @@ export function PostDetail({ id, onDeleted }: PostDetailProps) {
           </div>
           <div className="md:hidden">
             <VoteButton
+              postId={post.id}
               count={post.voteCount}
               voted={post.voted}
               onClick={() => vote.mutate(post.id)}
@@ -106,10 +110,12 @@ export function PostDetail({ id, onDeleted }: PostDetailProps) {
         <PostActions
           postId={post.id}
           status={post.status}
+          board={post.board}
           boardName={post.boardName}
           assignee={post.assignee}
           canTriage={canTriage}
           onStatus={(status) => update.mutate({ status })}
+          onBoard={(board) => update.mutate({ board })}
           onAssign={(assigneeId) => update.mutate({ assigneeId })}
           onDelete={() => {
             if (confirm("Delete this post and all its comments?")) {
@@ -136,6 +142,7 @@ export function PostDetail({ id, onDeleted }: PostDetailProps) {
 
       <aside className="sticky top-20 hidden w-40 shrink-0 flex-col items-center gap-6 md:flex">
         <VoteButton
+          postId={post.id}
           count={post.voteCount}
           voted={post.voted}
           onClick={() => vote.mutate(post.id)}
@@ -328,24 +335,29 @@ function AssigneeControl({
 function PostActions({
   postId,
   status,
+  board,
   boardName,
   assignee,
   canTriage,
   onStatus,
+  onBoard,
   onAssign,
   onDelete,
 }: {
   postId: number;
   status: Status;
+  board: string;
   boardName: string;
   assignee: Assignee | null;
   canTriage: boolean;
   onStatus: (status: Status) => void;
+  onBoard: (board: string) => void;
   onAssign: (assigneeId: number | null) => void;
   onDelete: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const { data: boards = [] } = useBoards();
 
   useEffect(() => {
     if (!open) return;
@@ -393,9 +405,7 @@ function PostActions({
                         type="button"
                         role="menuitem"
                         className={`flex h-8 w-full items-center gap-2.5 rounded-xl px-2 text-[13px] transition-colors ${
-                          selected
-                            ? "bg-hover text-fg"
-                            : "text-muted hover:bg-hover hover:text-fg"
+                          selected ? "bg-hover text-fg" : "text-muted hover:bg-hover hover:text-fg"
                         }`}
                         onClick={() => {
                           onStatus(item);
@@ -410,6 +420,37 @@ function PostActions({
                   })}
                 </div>
               </div>
+              {boards.length > 1 && (
+                <div className="border-t border-[var(--line)] px-2.5 pt-2.5 pb-1.5">
+                  <p className="px-2 pb-1.5 text-[10px] font-medium tracking-wide text-faint uppercase">
+                    Move to board
+                  </p>
+                  <div className="flex max-h-44 flex-col gap-0.5 overflow-y-auto">
+                    {boards.map((item) => {
+                      const selected = item.slug === board;
+                      return (
+                        <button
+                          key={item.slug}
+                          type="button"
+                          role="menuitem"
+                          className={`flex h-8 w-full items-center gap-2.5 rounded-xl px-2 text-[13px] transition-colors ${
+                            selected
+                              ? "bg-hover text-fg"
+                              : "text-muted hover:bg-hover hover:text-fg"
+                          }`}
+                          onClick={() => {
+                            setOpen(false);
+                            if (!selected) onBoard(item.slug);
+                          }}
+                        >
+                          <span className="min-w-0 flex-1 truncate text-left">{item.name}</span>
+                          {selected && <Check width={12} height={12} className="text-fg" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
               <div className="border-t border-[var(--line)] px-2.5 py-2">
                 <button
                   type="button"
@@ -541,7 +582,7 @@ function CommentItem({
   const staff = Boolean(me?.user?.staff && !me.user.suspended);
 
   return (
-    <div className="flex gap-3">
+    <div id={`comment-${comment.id}`} className="flex scroll-mt-24 gap-3 rounded-xl">
       <Avatar
         name={comment.authorName}
         src={comment.authorAvatar}

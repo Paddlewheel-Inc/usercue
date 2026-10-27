@@ -149,7 +149,7 @@ async function editMessage(url: string, messageId: string, payload: unknown): Pr
   }
 }
 
-function postEmbed(origin: string, post: PostInfo, activity?: string) {
+function postEmbed(origin: string, post: PostInfo) {
   const excerpt = stripHtml(post.body).slice(0, 300);
   const votes = post.voteCount ?? 0;
   const icon = authorIconUrl(origin, post);
@@ -171,16 +171,15 @@ function postEmbed(origin: string, post: PostInfo, activity?: string) {
         inline: false,
       },
     ],
-    footer: activity ? { text: activity } : undefined,
     timestamp: new Date().toISOString(),
   };
 }
 
-async function syncPostMessage(origin: string, post: PostInfo, activity?: string): Promise<void> {
+async function syncPostMessage(origin: string, post: PostInfo): Promise<void> {
   const url = await webhookUrl();
   if (!url) return;
 
-  const payload = { embeds: [postEmbed(origin, post, activity)] };
+  const payload = { embeds: [postEmbed(origin, post)] };
   const existing = (await readMessageId.get(post.id))?.message_id ?? "";
   if (existing && (await editMessage(url, existing, payload))) return;
 
@@ -258,10 +257,7 @@ async function postTeams(origin: string, post: PostInfo, activity: string): Prom
 }
 
 export async function notifyNewPost(origin: string, post: PostInfo): Promise<void> {
-  await Promise.all([
-    syncPostMessage(origin, post, "New post"),
-    postTeams(origin, post, "New post"),
-  ]);
+  await Promise.all([syncPostMessage(origin, post), postTeams(origin, post, "New post")]);
 }
 
 export async function notifyStatusChange(
@@ -270,7 +266,7 @@ export async function notifyStatusChange(
   actorName: string,
 ): Promise<void> {
   const activity = `${actorName} moved this to ${STATUS_LABELS[post.status]}`;
-  await Promise.all([syncPostMessage(origin, post, activity), postTeams(origin, post, activity)]);
+  await Promise.all([syncPostMessage(origin, post), postTeams(origin, post, activity)]);
 }
 
 export async function notifyComment(
@@ -279,5 +275,5 @@ export async function notifyComment(
   comment: { authorName: string },
 ): Promise<void> {
   const activity = `${comment.authorName} commented`;
-  await Promise.all([syncPostMessage(origin, post, activity), postTeams(origin, post, activity)]);
+  await Promise.all([syncPostMessage(origin, post), postTeams(origin, post, activity)]);
 }

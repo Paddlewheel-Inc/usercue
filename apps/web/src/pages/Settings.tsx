@@ -1351,8 +1351,8 @@ function Menu({
       {open && (
         <div
           role="menu"
-          className={`menu absolute z-30 mt-1.5 min-w-40 ${
-            align === "right" ? "right-0" : "left-0"
+          className={`absolute z-30 mt-2 min-w-48 origin-top animate-rise overflow-hidden rounded-2xl bg-bg shadow-[0_0_0_1px_var(--line),var(--shadow)] ${
+            align === "right" ? "right-0 origin-top-right" : "left-0 origin-top-left"
           }`}
         >
           {children(() => setOpen(false))}
@@ -1360,6 +1360,12 @@ function Menu({
       )}
     </div>
   );
+}
+
+function RoleIcon({ src, size = "sm" }: { src?: string | null; size?: "sm" | "md" }) {
+  const box = size === "md" ? "size-5" : "size-4";
+  if (!src) return <span className={`${box} shrink-0`} aria-hidden />;
+  return <img src={src} alt="" className={`${box} shrink-0 object-contain`} />;
 }
 
 function RolePicker({
@@ -1381,12 +1387,10 @@ function RolePicker({
 }) {
   const label = currentName ?? "No role";
   const chip = (
-    <span className="inline-flex h-7 max-w-36 items-center gap-1.5 rounded-full bg-hover px-2.5 text-[12px] text-muted">
-      {currentIcon && (
-        <img src={currentIcon} alt="" className="size-3.5 shrink-0 rounded-full object-cover" />
-      )}
-      <span className="truncate">{label}</span>
-      {!disabled && <ChevronDown width={11} height={11} />}
+    <span className="inline-flex h-7 max-w-44 items-center gap-1.5 rounded-full bg-hover px-2.5 text-[12px] text-muted">
+      <RoleIcon src={currentIcon} />
+      <span className="min-w-0 truncate">{label}</span>
+      {!disabled && <ChevronDown width={11} height={11} className="shrink-0 opacity-70" />}
     </span>
   );
 
@@ -1403,7 +1407,9 @@ function RolePicker({
       trigger={(open, toggle) => (
         <button
           type="button"
-          className="rounded-full outline-none hover:bg-hover"
+          className={`rounded-full outline-none transition-colors ${
+            open ? "bg-line text-fg" : "hover:bg-hover"
+          }`}
           aria-label={`Role for ${name}`}
           aria-expanded={open}
           aria-haspopup="menu"
@@ -1413,32 +1419,36 @@ function RolePicker({
         </button>
       )}
     >
-      {(close) =>
-        roles.map((role) => (
-          <button
-            key={role.id}
-            type="button"
-            role="menuitem"
-            className="menu-item gap-2"
-            onClick={() => {
-              onSelect(role.id);
-              close();
-            }}
-          >
-            {role.iconUrl ? (
-              <img
-                src={role.iconUrl}
-                alt=""
-                className="size-4 shrink-0 rounded-full object-cover"
-              />
-            ) : (
-              <span className="size-4 shrink-0" />
-            )}
-            <span className="flex-1 truncate text-left">{role.name}</span>
-            {role.id === currentId && <Check width={12} height={12} />}
-          </button>
-        ))
-      }
+      {(close) => (
+        <div className="px-2.5 pt-2.5 pb-2">
+          <p className="px-2 pb-1.5 text-[10px] font-medium tracking-wide text-faint uppercase">
+            Role
+          </p>
+          <div className="flex max-h-64 flex-col gap-0.5 overflow-y-auto">
+            {roles.map((role) => {
+              const selected = role.id === currentId;
+              return (
+                <button
+                  key={role.id}
+                  type="button"
+                  role="menuitem"
+                  className={`flex h-8 w-full items-center gap-2.5 rounded-xl px-2 text-[13px] transition-colors ${
+                    selected ? "bg-hover text-fg" : "text-muted hover:bg-hover hover:text-fg"
+                  }`}
+                  onClick={() => {
+                    onSelect(role.id);
+                    close();
+                  }}
+                >
+                  <RoleIcon src={role.iconUrl} size="md" />
+                  <span className="min-w-0 flex-1 truncate text-left">{role.name}</span>
+                  {selected && <Check width={12} height={12} className="shrink-0 text-fg" />}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </Menu>
   );
 }
@@ -1473,11 +1483,11 @@ function UserMore({
       )}
     >
       {(close) => (
-        <>
+        <div className="flex flex-col gap-0.5 p-2">
           <button
             type="button"
             role="menuitem"
-            className="menu-item"
+            className="flex h-8 w-full items-center rounded-xl px-2.5 text-[13px] text-muted transition-colors hover:bg-hover hover:text-fg"
             onClick={() => {
               close();
               onSuspend();
@@ -1488,16 +1498,16 @@ function UserMore({
           <button
             type="button"
             role="menuitem"
-            className="menu-item gap-2 text-rose-500 hover:text-rose-500"
+            className="flex h-8 w-full items-center gap-2 rounded-xl px-2.5 text-[13px] text-rose-400 transition-colors hover:bg-rose-500/10 hover:text-rose-300"
             onClick={() => {
               close();
               onDelete();
             }}
           >
-            <Trash width={12} height={12} />
+            <Trash width={14} height={14} />
             Delete
           </button>
-        </>
+        </div>
       )}
     </Menu>
   );

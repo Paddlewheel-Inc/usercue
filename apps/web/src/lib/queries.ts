@@ -103,7 +103,10 @@ export function useVote() {
       qc.setQueriesData<Post[]>({ queryKey: ["posts"] }, (old) => old?.map((p) => toggle(id, p)));
       qc.setQueryData<PostDetail>(["post", id], (old) => old && toggle(id, old));
     },
-    onSettled: invalidate,
+    onSettled: () => {
+      invalidate();
+      qc.invalidateQueries({ queryKey: ["voters"] });
+    },
   });
 }
 
@@ -133,6 +136,7 @@ export function useUpdatePost(id: number) {
   const invalidate = useInvalidatePosts();
   return useMutation({
     mutationFn: (patch: {
+      board?: string;
       status?: Status;
       title?: string;
       body?: string;
@@ -209,6 +213,35 @@ export const usePeople = (q: string, enabled = true) =>
     enabled,
     placeholderData: keepPreviousData,
   });
+
+export const useVoters = (postId: number, enabled: boolean) =>
+  useQuery({
+    queryKey: ["voters", postId],
+    queryFn: () => unwrap(api.posts[":id"].voters.$get({ param: { id: String(postId) } })),
+    enabled,
+    staleTime: 10_000,
+  });
+
+export const useNotifications = (enabled: boolean) =>
+  useQuery({
+    queryKey: ["notifications"],
+    queryFn: () => unwrap(api.notifications.$get()),
+    enabled,
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: true,
+    staleTime: 10_000,
+  });
+
+export function useReadNotifications() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id?: number) =>
+      id === undefined
+        ? unwrap(api.notifications.read.$post())
+        : unwrap(api.notifications[":id"].read.$post({ param: { id: String(id) } })),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["notifications"] }),
+  });
+}
 
 export function useDeleteChangelogEntry(id: number) {
   const invalidate = useInvalidateChangelog();

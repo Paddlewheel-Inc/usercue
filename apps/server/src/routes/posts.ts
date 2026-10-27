@@ -38,6 +38,7 @@ const createPost = v.object({
 });
 
 const updatePost = v.object({
+  board: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(80))),
   status: v.optional(v.picklist(STATUSES)),
   title: v.optional(text(LIMITS.title)),
   body: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(LIMITS.body))),
@@ -143,7 +144,15 @@ const insertPost = db.query<{ id: number }>(
   "INSERT INTO posts (board_id, title, body, author_name, author_id) VALUES (?, ?, ?, ?, ?) RETURNING id",
 );
 const insertVote = db.query(
-  "INSERT INTO votes (post_id, voter_id) VALUES (?, ?) ON CONFLICT (post_id, voter_id) DO NOTHING",
+  "INSERT INTO votes (post_id, voter_id, user_id) VALUES (?, ?, ?) ON CONFLICT (post_id, voter_id) DO NOTHING",
+);
+const listVoters = db.query<{ name: string | null; avatar_url: string | null }>(
+  `SELECT COALESCE(u.name, i.name) AS name, u.avatar_url
+   FROM votes v
+   LEFT JOIN users u ON u.id = v.user_id
+   LEFT JOIN identities i ON i.visitor_id = v.voter_id
+   WHERE v.post_id = ?
+   ORDER BY v.created_at DESC, v.voter_id`,
 );
 const deleteVote = db.query<{ post_id: number }>(
   "DELETE FROM votes WHERE post_id = ? AND voter_id = ? RETURNING post_id",
@@ -169,12 +178,12 @@ const hasVote = db.query<{ n: number }>(
   "SELECT COUNT(*)::int AS n FROM votes WHERE post_id = ? AND voter_id = ?",
 );
 
-const toggleVote = (postId: number, voterId: string) =>
+const toggleVote = (postId: number, voterId: string, userId: number | null) =>
   db.transaction(async () => {
     const removed = await deleteVote.get(postId, voterId);
     if (removed) await bumpVotes.run(-1, postId);
     else {
-      await insertVote.run(postId, voterId);
+      await insertVote.run(postId, voterId, userId);
       await bumpVotes.run(1, postId);
     }
     return { voteCount: (await readVotes.get(postId))?.vote_count ?? 0 };
@@ -330,6 +339,7 @@ const serializeChange = (row: StatusChangeRow) => ({
 });
 
 const setAssignee = db.query("UPDATE posts SET assignee_id = ? WHERE id = ?");
+const setBoard = db.query("UPDATE posts SET board_id = ? WHERE id = ?");
 const listTagIds = db.query<{ id: number }>("SELECT id FROM tags");
 const clearPostTags = db.query("DELETE FROM post_tags WHERE post_id = ?");
 const insertPostTag = db.query("INSERT INTO post_tags (post_id, tag_id) VALUES (?, ?)");
@@ -416,7 +426,7 @@ export const posts = new Hono<AppEnv>()
     if (!created) return c.json({ error: "Could not create post" }, 500);
     if (tagIds.length) await replaceTags(created.id, tagIds);
 
-    await toggleVote(created.id, c.get("visitorId"));
+    await toggleVote(created.id, c.get("visitorId"), team?.id ?? null);
     await insertStatusChange.run(created.id, "open", team?.id ?? null, author);
 
     const post = await getPost.get({
@@ -442,9 +452,24 @@ export const posts = new Hono<AppEnv>()
     const { id } = c.req.valid("param");
     if (!(await postExists.get(id))) return c.json({ error: "Not found" }, 404);
 
-    const { voteCount } = await toggleVote(id, c.get("visitorId"));
+    const { voteCount } = await toggleVote(id, c.get("visitorId"), c.get("user")?.id ?? null);
     const voted = await hasVote.get(id, c.get("visitorId"));
     return c.json({ voteCount, voted: (voted?.n ?? 0) > 0 });
+  })
+
+  .get("/:id/voters", rateLimit(120, 60), vValidator("param", idParam), async (c) => {
+    const { id } = c.req.valid("param");
+    if (!(await postExists.get(id))) return c.json({ error: "Not found" }, 404);
+    const rows = await listVoters.all(id);
+    const named = rows.filter((row) => row.name);
+    return c.json({
+      total: rows.length,
+      anonymous: rows.length - named.length,
+      people: named.slice(0, 12).map((row) => ({
+        name: row.name ?? "",
+        avatarUrl: row.avatar_url || null,
+      })),
+    });
   })
 
   .post(
@@ -510,9 +535,11 @@ export const posts = new Hono<AppEnv>()
           html: clean,
           origin,
           path: `/post/${id}`,
+          commentId: row.id,
           title: meta.title,
           authorName: author,
           authorId: team?.id ?? null,
+          authorStaff: Boolean(team?.staff),
         });
       }
       return c.json(serializeComment(row), 201);
@@ -560,7 +587,15 @@ export const posts = new Hono<AppEnv>()
         }
       }
 
+      let boardId: number | null = null;
+      if (patch.board !== undefined) {
+        const target = await boardBySlug.get(patch.board);
+        if (!target) return c.json({ error: "Board not found" }, 404);
+        boardId = target.id;
+      }
+
       const previous = await findPostStatus.get(id);
+      if (boardId !== null) await setBoard.run(boardId, id);
       await applyUpdate(id, {
         status: patch.status,
         title: patch.title,

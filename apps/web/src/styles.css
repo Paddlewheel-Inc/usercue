@@ -367,7 +367,22 @@
   background: color-mix(in srgb, #fb7185 18%, transparent);
   color: #fda4af;
 }
-.rich span[data-mention] {
+.flash {
+  animation: flash 2.6s ease-out;
+}
+@keyframes flash {
+  0%,
+  45% {
+    background: var(--accent-soft);
+    box-shadow: 0 0 0 8px var(--accent-soft);
+  }
+  100% {
+    background: transparent;
+    box-shadow: 0 0 0 8px transparent;
+  }
+}
+.rich span[data-mention],
+.rich span[data-mention-role] {
   display: inline;
   margin: 0 0.05em;
   padding: 0.05em 0.35em;

@@ -4,6 +4,7 @@ import { type AppEnv, identify } from "./middleware";
 import { auth } from "./routes/auth";
 import { boards } from "./routes/boards";
 import { changelog } from "./routes/changelog";
+import { notifications } from "./routes/notifications";
 import { oauth } from "./routes/oauth";
 import { og } from "./routes/og";
 import { people } from "./routes/people";
@@ -19,6 +20,7 @@ const api = new Hono<AppEnv>()
   .route("/boards", boards)
   .route("/posts", posts)
   .route("/changelog", changelog)
+  .route("/notifications", notifications)
   .route("/people", people)
   .route("/og", og)
   .route("/settings", settings)

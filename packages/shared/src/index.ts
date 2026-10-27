@@ -115,6 +115,7 @@ export const LIMITS = {
   name: 60,
   imageBytes: 1_500_000,
   mentions: 8,
+  roleMentions: 3,
 } as const;
 
 export {
@@ -123,6 +124,8 @@ export {
   isPostHref,
   mentionChip,
   parseMentionIds,
+  parseRoleMentionIds,
+  roleMentionChip,
   sanitizeHtml,
   stripHtml,
 } from "./html";

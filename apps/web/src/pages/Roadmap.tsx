@@ -36,6 +36,7 @@ function Card({ post, index }: { post: Post; index: number }) {
         </span>
         <VoteButton
           compact
+          postId={post.id}
           count={post.voteCount}
           voted={post.voted}
           onClick={() => vote.mutate(post.id)}

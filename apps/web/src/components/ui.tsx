@@ -1,5 +1,16 @@
 import { STATUS_LABELS, type Status, tagColorHex } from "@usercue/shared";
-import { createContext, type ReactNode, useCallback, useContext, useEffect, useState } from "react";
+import {
+  createContext,
+  type ReactNode,
+  type SyntheticEvent,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+import { createPortal } from "react-dom";
+import { useVoters } from "../lib/queries";
 import { ArrowUp, Check, Copy } from "./icons";
 
 export const STATUS_DOT: Record<Status, string> = {
@@ -46,49 +57,158 @@ export function StatusBadge({ status }: { status: Status }) {
   );
 }
 
+export function useHoverCard() {
+  const [anchor, setAnchor] = useState<DOMRect | null>(null);
+  const timer = useRef(0);
+
+  useEffect(() => () => window.clearTimeout(timer.current), []);
+
+  const show = (event: SyntheticEvent<HTMLElement>) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    window.clearTimeout(timer.current);
+    timer.current = window.setTimeout(() => setAnchor(rect), 180);
+  };
+  const hide = () => {
+    window.clearTimeout(timer.current);
+    timer.current = window.setTimeout(() => setAnchor(null), 60);
+  };
+
+  return {
+    anchor,
+    bind: { onMouseEnter: show, onMouseLeave: hide, onFocus: show, onBlur: hide },
+  };
+}
+
+export interface HoverPerson {
+  name: string;
+  avatarUrl: string | null;
+}
+
+function uniqueKeys(people: HoverPerson[]) {
+  const seen = new Map<string, number>();
+  return people.map((person) => {
+    const base = `${person.name}|${person.avatarUrl ?? ""}`;
+    const n = (seen.get(base) ?? 0) + 1;
+    seen.set(base, n);
+    return { key: `${base}|${n}`, person };
+  });
+}
+
+export function PeopleCard({
+  anchor,
+  title,
+  people,
+  footer,
+  loading = false,
+}: {
+  anchor: DOMRect;
+  title: string;
+  people: HoverPerson[];
+  footer?: string;
+  loading?: boolean;
+}) {
+  const below = anchor.top < 180;
+  const left = Math.min(Math.max(anchor.left + anchor.width / 2, 136), window.innerWidth - 136);
+
+  return createPortal(
+    <div
+      role="tooltip"
+      style={{
+        left,
+        top: below ? anchor.bottom + 8 : anchor.top - 8,
+        translate: below ? "-50% 0" : "-50% -100%",
+      }}
+      className="pointer-events-none fixed z-50 w-64 animate-rise rounded-2xl bg-surface p-2.5 shadow-[0_0_0_1px_var(--line),var(--shadow-lg)]"
+    >
+      <p className="px-1 pb-1.5 text-[10px] font-semibold tracking-wide text-faint uppercase">
+        {title}
+      </p>
+      {loading ? (
+        <p className="px-1 py-1 text-[13px] text-muted">Loading…</p>
+      ) : (
+        <ul className="flex max-h-60 flex-col gap-0.5 overflow-hidden">
+          {uniqueKeys(people).map(({ key, person }) => (
+            <li key={key} className="flex items-center gap-2 rounded-lg px-1 py-1 text-[13px]">
+              <Avatar name={person.name} src={person.avatarUrl} size="sm" />
+              <span className="min-w-0 truncate">{person.name}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {footer && <p className="px-1 pt-1.5 text-[11px] text-faint">{footer}</p>}
+    </div>,
+    document.body,
+  );
+}
+
 interface VoteButtonProps {
   count: number;
   voted: boolean;
   onClick: () => void;
   compact?: boolean;
+  postId?: number;
 }
 
-export function VoteButton({ count, voted, onClick, compact = false }: VoteButtonProps) {
+function votersFooter(total: number, shown: number, anonymous: number): string | undefined {
+  const parts: string[] = [];
+  const more = Math.max(total - anonymous - shown, 0);
+  if (more > 0) parts.push(`+${more} more`);
+  if (anonymous > 0) parts.push(`${anonymous} anonymous`);
+  return parts.length > 0 ? parts.join(" · ") : undefined;
+}
+
+export function VoteButton({ count, voted, onClick, compact = false, postId }: VoteButtonProps) {
+  const hover = useHoverCard();
+  const showCard = postId !== undefined && count > 0 && hover.anchor !== null;
+  const { data } = useVoters(postId ?? 0, showCard);
+
   return (
-    <button
-      key={voted ? "on" : "off"}
-      type="button"
-      aria-pressed={voted}
-      aria-label={voted ? "Remove vote" : "Upvote"}
-      onClick={(e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        onClick();
-      }}
-      className={
-        compact
-          ? `inline-flex shrink-0 items-center gap-0.5 text-[12px] font-medium tabular-nums transition-colors ${
-              voted ? "text-accent" : "text-muted hover:text-accent"
-            }`
-          : `group/vote inline-flex w-10 shrink-0 flex-col items-center justify-center gap-0.5 rounded-xl py-1.5 text-[12px] leading-none font-semibold tabular-nums transition-[transform,background-color,color,box-shadow] duration-150 active:scale-95 ${
-              voted
-                ? "animate-pop bg-accent-soft text-accent"
-                : "bg-surface text-muted shadow-[var(--shadow)] hover:text-accent"
-            }`
-      }
-    >
-      <ArrowUp
-        width={compact ? 12 : 13}
-        height={compact ? 12 : 13}
-        strokeWidth={2.25}
+    <>
+      <button
+        key={voted ? "on" : "off"}
+        type="button"
+        aria-pressed={voted}
+        aria-label={voted ? "Remove vote" : "Upvote"}
+        {...(postId !== undefined ? hover.bind : {})}
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          onClick();
+        }}
         className={
           compact
-            ? undefined
-            : "transition-transform duration-200 group-hover/vote:-translate-y-0.5"
+            ? `inline-flex shrink-0 items-center gap-0.5 text-[12px] font-medium tabular-nums transition-colors ${
+                voted ? "text-accent" : "text-muted hover:text-accent"
+              }`
+            : `group/vote inline-flex w-10 shrink-0 flex-col items-center justify-center gap-0.5 rounded-xl py-1.5 text-[12px] leading-none font-semibold tabular-nums transition-[transform,background-color,color,box-shadow] duration-150 active:scale-95 ${
+                voted
+                  ? "animate-pop bg-accent-soft text-accent"
+                  : "bg-surface text-muted shadow-[var(--shadow)] hover:text-accent"
+              }`
         }
-      />
-      {count}
-    </button>
+      >
+        <ArrowUp
+          width={compact ? 12 : 13}
+          height={compact ? 12 : 13}
+          strokeWidth={2.25}
+          className={
+            compact
+              ? undefined
+              : "transition-transform duration-200 group-hover/vote:-translate-y-0.5"
+          }
+        />
+        {count}
+      </button>
+      {showCard && hover.anchor && (
+        <PeopleCard
+          anchor={hover.anchor}
+          title={`${count} ${count === 1 ? "vote" : "votes"}`}
+          people={data?.people ?? []}
+          loading={!data}
+          footer={data ? votersFooter(data.total, data.people.length, data.anonymous) : undefined}
+        />
+      )}
+    </>
   );
 }
 

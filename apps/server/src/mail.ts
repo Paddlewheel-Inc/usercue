@@ -101,7 +101,10 @@ function safeHttpUrl(value: string): string | null {
 }
 
 function plainSubject(value: string): string {
-  return value.replace(/[\r\n\u0000-\u001f\u007f]/g, " ").trim().slice(0, 120);
+  return value
+    .replace(/[\r\n\u0000-\u001f\u007f]/g, " ")
+    .trim()
+    .slice(0, 120);
 }
 
 export async function sendMentionEmail(options: {

@@ -8,6 +8,7 @@ import {
   isPostHref,
   LIMITS,
   mentionChip,
+  roleMentionChip,
   sanitizeHtml,
 } from "@usercue/shared";
 import {
@@ -34,7 +35,7 @@ import {
   NumberedList,
   Underline,
 } from "./icons";
-import { Avatar, STATUS_DOT } from "./ui";
+import { Avatar, RoleBadge, STATUS_DOT } from "./ui";
 
 interface EditorProps {
   value: string;
@@ -576,6 +577,14 @@ export function Editor({
     emit();
   }
 
+  function insertRole(id: number, name: string) {
+    replaceToken(readPing(root.current), `${roleMentionChip(id, name)}\u00a0`);
+    setPing(null);
+    setMention(null);
+    setSlash(null);
+    emit();
+  }
+
   function insertSection(label: ChangelogSection) {
     replaceToken(readSlash(root.current), `${changelogSectionChip(label)}\u00a0`);
     setSlash(null);
@@ -735,6 +744,7 @@ export function Editor({
               query={ping.query}
               focusSearch={Boolean(ping.pinned)}
               onPick={insertPerson}
+              onPickRole={insertRole}
               onClose={() => setPing(null)}
             />
           )}
@@ -982,23 +992,26 @@ export function PeoplePicker({
   query,
   focusSearch = false,
   onPick,
+  onPickRole,
   onClose,
 }: {
   query: string;
   focusSearch?: boolean;
   onPick: (id: number, name: string) => void;
+  onPickRole: (id: number, name: string) => void;
   onClose: () => void;
 }) {
   const [q, setQ] = useState(query);
   useEffect(() => setQ(query), [query]);
   const { data } = usePeople(q.trim());
   const list = data?.people ?? [];
+  const roles = data?.roles ?? [];
 
   return (
     <div className="card overflow-hidden p-1.5">
       <input
         className="input h-8"
-        placeholder="Search people…"
+        placeholder={roles.length > 0 ? "Search people and roles…" : "Search people…"}
         value={q}
         autoFocus={focusSearch}
         onChange={(e) => setQ(e.target.value)}
@@ -1011,13 +1024,44 @@ export function PeoplePicker({
           if (e.key === "Enter") {
             e.preventDefault();
             const first = list[0];
+            const firstRole = roles[0];
             if (first) onPick(first.id, first.name);
+            else if (firstRole) onPickRole(firstRole.id, firstRole.name);
           }
         }}
       />
       <ul className="mt-1 max-h-56 overflow-y-auto">
-        {list.length === 0 && (
+        {list.length === 0 && roles.length === 0 && (
           <li className="px-2.5 py-2 text-[12px] text-faint">No matching people</li>
+        )}
+        {roles.length > 0 && (
+          <li className="px-2.5 pt-1.5 pb-1 text-[10px] font-semibold tracking-wide text-faint uppercase">
+            Roles
+          </li>
+        )}
+        {roles.map((role) => (
+          <li key={`role-${role.id}`}>
+            <button
+              type="button"
+              className="flex w-full items-center gap-2 rounded-xl px-2.5 py-1.5 text-left hover:bg-hover"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => onPickRole(role.id, role.name)}
+            >
+              {role.iconUrl ? (
+                <RoleBadge name={role.name} iconUrl={role.iconUrl} size="sm" />
+              ) : (
+                <span className="inline-flex size-4 items-center justify-center rounded-md bg-accent-soft text-[10px] font-semibold text-accent-text">
+                  @
+                </span>
+              )}
+              <span className="min-w-0 truncate text-[13px]">{role.name}</span>
+            </button>
+          </li>
+        ))}
+        {roles.length > 0 && list.length > 0 && (
+          <li className="px-2.5 pt-1.5 pb-1 text-[10px] font-semibold tracking-wide text-faint uppercase">
+            People
+          </li>
         )}
         {list.map((person) => (
           <li key={person.id}>

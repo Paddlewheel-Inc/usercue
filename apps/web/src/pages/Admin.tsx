@@ -9,6 +9,7 @@ import {
 } from "react";
 import { Link, useLocation, useParams, useSearch } from "wouter";
 import { Gear, Heart, Inbox, LogOut, Menu, Pen, Plus, Roadmap, Search } from "../components/icons";
+import { NotificationBell } from "../components/NotificationBell";
 import { PostDetail } from "../components/PostDetail";
 import { PostRow } from "../components/PostRow";
 import { Logo } from "../components/PublicLayout";
@@ -212,6 +213,7 @@ function Sidebar({
             {me?.user?.staff && me.user.roleName && (
               <RoleBadge name={me.user.roleName} iconUrl={me.user.roleIcon} size="xs" />
             )}
+            <NotificationBell placement="up" />
             <button
               type="button"
               className="inline-flex size-7 items-center justify-center rounded-full text-faint transition-colors hover:bg-hover hover:text-fg"
