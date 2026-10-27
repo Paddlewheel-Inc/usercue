@@ -32,6 +32,7 @@ services:
       PORT: "3000"
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
       PUBLIC_URL: ${PUBLIC_URL:-http://localhost:5173}
+      VITE_USE_POLLING: "true"
     volumes:
       - .:/app
       - node_modules:/app/node_modules
