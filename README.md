@@ -77,7 +77,7 @@ These are the people who have helped shape UserCue
 
 ## License
 
-Copyright Paddlewheel Inc. UserCue is licensed under the [PolyForm Noncommercial License 1.0.0](LICENSE).
+Copyright Paddlewheel Inc. UserCue is licensed under the [SLI-HR-1.0](LICENSE).
 
 Anyone who receives a copy has to keep that license and the `Required Notice` line in `LICENSE`. Commercial use is not allowed. The UserCue name and logo stay with Paddlewheel Inc. and are not part of the license.
 
