@@ -546,3 +546,19 @@ NOTHING IN SECTIONS 19.8 THROUGH 19.11 EXCLUDES OR LIMITS LIABILITY THAT CANNOT 
 21.3. Separate written agreements may grant additional permissions without amending the public terms of this License.
 
 END OF TERMS AND CONDITIONS
+
+HOW TO APPLY THIS LICENSE
+
+To apply this License to your software, include a complete copy of
+this License with your distribution and add the following copyright
+notice, replacing the placeholders with your information:
+
+Copyright (c) [YEAR] [COPYRIGHT HOLDER]
+
+Licensed under the SLI Hosting Restricted License,
+Version 1.0 (SLI-HR-1.0).
+
+You may also include this notice in individual source files.
+
+Do not modify the legal text of this License when applying it to
+your software.
