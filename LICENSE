@@ -1,79 +1,548 @@
-Required Notice: Copyright UserCue by Paddlewheel Inc.
+SLI HOSTING RESTRICTED LICENSE
+Version 1.0 (SLI-HR-1.0)
 
-UserCue and the UserCue logo are trademarks of Paddlewheel Inc.
-These terms do not grant any right to use those names or logos,
-including to name or brand a copy or a modified version as a different product.
+License text copyright (c) 2026 Sleepy Lab Innovations Inc.
 
-# PolyForm Noncommercial License 1.0.0
+TERMS AND CONDITIONS
 
-https://polyformproject.org/licenses/noncommercial/1.0.0
+1. DEFINITIONS
 
-## Acceptance
+1.1. "License" means this SLI Hosting Restricted License, Version 1.0.
 
-In order to get any license under these terms, you must agree to them as both strict obligations and conditions to all your licenses.
+1.2. "Licensor" means each individual or legal entity that owns or controls copyright or other applicable intellectual property rights in the Software and makes those rights available under this License.
 
-## Copyright License
+1.3. "You" and "Your" mean the individual or legal entity exercising rights under this License.
 
-The licensor grants you a copyright license for the software to do everything you might do with the software that would otherwise infringe the licensor's copyright in it for any permitted purpose. However, you may only distribute the software according to Distribution License and make changes or new works based on the software according to Changes and New Works License.
+1.4. "Your Organization" means You and, where applicable, any legal entity, sole proprietorship, partnership, or other organization that directly or indirectly controls, is controlled by, or is under common control with You.
 
-## Distribution License
+"Control" means the power to direct an entity's management or policies through ownership, voting rights, contractual arrangements, or otherwise.
 
-The licensor grants you an additional copyright license to distribute copies of the software. Your license to distribute covers distributing the software with changes and new works permitted by Changes and New Works License.
+1.5. "Software" means the copyrighted software, source code, executable code, documentation, and other materials expressly made available under this License.
 
-## Notices
+1.6. "Covered Work" means the Software, any Modified Version, any Derivative Work, and any Combined Work to the extent subject to this License.
 
-You must ensure that anyone who gets a copy of any part of the software from you also gets a copy of these terms or the URL for them above, as well as copies of any plain-text lines beginning with `Required Notice:` that the licensor provided with the software. For example:
+1.7. "Modified Version" means a version of the Software containing additions, deletions, adaptations, corrections, replacements, or other changes to its copyright-protected material.
 
-> Required Notice: Copyright Yoyodyne, Inc. (http://example.com)
+1.8. "Derivative Work" means a work based upon or derived from the Software that requires authorization from a Licensor under applicable copyright law.
 
-## Changes and New Works License
+1.9. "Combined Work" means a work incorporating the Software with other components where the resulting combination constitutes a derivative work or otherwise requires authorization from a Licensor under applicable copyright law.
 
-The licensor grants you an additional copyright license to make changes and new works based on the software for any permitted purpose.
+1.10. "Corresponding Source" means the complete source code of a Covered Work in the preferred form for making modifications, together with all materials reasonably necessary to build, install, execute, maintain, and modify that Covered Work.
 
-## Patent License
+Corresponding Source includes, where applicable:
 
-The licensor grants you a patent license for the software that covers patent claims the licensor can license, or becomes able to license, that you would infringe by using the software.
+(a) Source code for all covered components;
 
-## Noncommercial Purposes
+(b) Build scripts and build configuration;
 
-Any noncommercial purpose is a permitted purpose.
+(c) Installation and deployment instructions;
 
-## Personal Uses
+(d) Interface definitions;
 
-Personal use for research, experiment, and testing for the benefit of public knowledge, personal study, private entertainment, hobby projects, amateur pursuits, or religious observance, without any anticipated commercial application, is use for a permitted purpose.
+(e) Dependency manifests and applicable lockfiles;
 
-## Noncommercial Organizations
+(f) Database schemas and migration scripts;
 
-Use by any charitable organization, educational institution, public research organization, public safety or health organization, environmental protection organization, or government institution is use for a permitted purpose regardless of the source of funding or obligations resulting from the funding.
+(g) Configuration templates;
 
-## Fair Use
+(h) Scripts required to generate executable forms;
 
-You may have "fair use" rights for the software under the law. These terms do not limit them.
+(i) Modifications to covered dependencies; and
 
-## No Other Rights
+(j) Other materials necessary to reproduce the functionality of the Covered Work from its source.
 
-These terms do not allow you to sublicense or transfer any of your licenses to anyone else, or prevent the licensor from granting licenses to anyone else. These terms do not imply any other licenses.
+Corresponding Source does not include credentials, private cryptographic keys, personal information, confidential production data, or independently licensed system components that are not part of the Covered Work.
 
-## Patent Defense
+1.11. "Convey" means to distribute, publish, transfer, or otherwise provide copies of a Covered Work to another individual or legal entity.
 
-If you make any written claim that the software infringes or contributes to infringement of any patent, your patent license for the software granted under these terms ends immediately. If your company makes such a claim, your patent license ends immediately for work on behalf of your company.
+1.12. "Operate" means to execute, deploy, maintain, or make a Covered Work available for ongoing functional use, including personal, organizational, production, staging, or network-accessible use.
 
-## Violations
+1.13. "Operational Use" means use of a Covered Work outside Development Testing, including ongoing personal use, organizational use, production deployment, or provision of functionality to users.
 
-The first time you are notified in writing that you have violated any of these terms, or done anything with the software not covered by your licenses, your licenses can nonetheless continue if you come into full compliance with these terms, and take practical steps to correct past violations, within 32 days of receiving notice. Otherwise, all your licenses end immediately.
+1.14. "Development Testing" means temporary execution reasonably necessary to develop, debug, evaluate, or test modifications before Operational Use.
 
-## No Liability
+Development Testing does not include continuous production use, ongoing organizational use, or making a Covered Work available as a functional service to ordinary users.
 
-***As far as the law allows, the software comes as is, without any warranty or condition, and the licensor will not be liable to you for any damages arising out of these terms or the use or nature of the software, under any kind of legal claim.***
+1.15. "Operational Modification" means any modification to copyright-protected material forming part of a Covered Work that is used outside Development Testing.
 
-## Definitions
+Changes solely to deployment-specific values, including hostnames, ports, credentials, environment variables, or resource allocations, do not independently constitute an Operational Modification unless they alter copyright-protected source code or form part of a modified Covered Work.
 
-The **licensor** is the individual or entity offering these terms, and the **software** is the software the licensor makes available under these terms.
+1.16. "Network Interaction" means interaction with a running Covered Work through a computer network, including through websites, application programming interfaces, remote clients, or other network interfaces.
 
-**You** refers to the individual or entity agreeing to these terms.
+1.17. "Internal Use" means operation of a Covered Work by an individual or organization for its own activities, including commercial business operations, without providing the Covered Work as an independent software service to another organization.
 
-**Your company** is any legal entity, sole proprietorship, or other kind of organization that you work for, plus all organizations that have control over, are under the control of, or are under common control with that organization. **Control** means ownership of substantially all the assets of an entity, or the power to direct its management and policies by vote, contract, or otherwise. Control can be direct or indirect.
+1.18. "Authorized Participants" means employees, contractors, contributors, customers, suppliers, or other individuals interacting with a Covered Work in connection with the operator's own activities.
 
-**Your licenses** are all the licenses granted to you for the software under these terms.
+1.19. "Third-Party Hosting" means operating, providing, or making available a Covered Work, directly or indirectly, so that another individual or organization may obtain the functionality of the Covered Work as a software service for its own independent purposes.
 
-**Use** means anything you do with the software requiring one of your licenses.
+Third-Party Hosting includes managed applications, hosted software products, white-label services, Software-as-a-Service offerings, and substantially equivalent arrangements.
+
+1.20. "Public Source Location" means an internet-accessible location from which any person may obtain the complete Corresponding Source without payment, mandatory account creation, identity verification, or discretionary approval.
+
+Ordinary technical measures necessary to protect infrastructure against abuse are permitted, provided they do not materially obstruct legitimate access.
+
+1.21. "Required Notice" means a plain-text notice supplied by a Licensor and expressly identified by the prefix "Required Notice:".
+
+1.22. "Cure" means cessation of violating conduct, restoration of compliance with all applicable provisions of this License, and completion of reasonable and practicable corrective measures addressing the consequences of the violation.
+
+Cure does not require reversal of consequences that cannot reasonably be reversed, but does require all reasonably practicable steps to remedy continuing effects. Cure does not extinguish liability for the original violation.
+
+1.23. "Notice" means a written communication identifying an alleged violation of this License, the affected Software or Covered Work, the applicable Licensor, and the conduct alleged to constitute the violation.
+
+1.24. "Notice Date" means the calendar date on which a Notice is successfully dispatched in accordance with Section 12.
+
+2. COPYRIGHT LICENSE
+
+2.1. Subject to compliance with this License, each Licensor grants You a worldwide, royalty-free, non-exclusive copyright license to:
+
+(a) Use and execute the Software;
+
+(b) Reproduce the Software;
+
+(c) Study and inspect its source code;
+
+(d) Modify the Software;
+
+(e) Create Derivative Works;
+
+(f) Convey the Software and Covered Works; and
+
+(g) Use the Software for personal, educational, research, organizational, and internal commercial purposes.
+
+2.2. These permissions extend only to intellectual property rights that the applicable Licensor owns or is authorized to license.
+
+2.3. All permissions are conditional upon compliance with this License. The obligations established herein constitute conditions of the permissions granted, to the extent permitted by applicable law.
+
+2.4. No permission is granted to engage in Third-Party Hosting except as expressly authorized under Section 8.
+
+2.5. No rights granted under this License may be sublicensed, assigned, or transferred except as expressly permitted herein or required by applicable law. Each recipient obtains rights directly from the applicable Licensors.
+
+2.6. A merger, acquisition, restructuring, or other organizational change does not independently authorize activities prohibited by this License. Any successor exercising rights under this License must independently comply with its terms.
+
+2.7. A Licensor remains free to grant additional, alternative, or separate licenses for material that the Licensor owns or is authorized to license.
+
+3. PATENT LICENSE
+
+3.1. Each Licensor grants You a worldwide, royalty-free, non-exclusive patent license under patent claims owned or controlled by that Licensor, including claims the Licensor subsequently becomes authorized to license, that would necessarily be infringed by exercising the permissions granted for the Software as provided by that Licensor.
+
+3.2. This patent license includes making, using, importing, offering for sale, selling, and otherwise transferring the Software solely to the extent consistent with this License.
+
+3.3. No patent license is granted for claims infringed solely because of modifications or combinations not supplied by the applicable Licensor.
+
+3.4. If You make, initiate, or maintain any written claim alleging that the Software or a Covered Work infringes or contributes to infringement of a patent, the patent licenses granted to You under this License terminate immediately, to the extent permitted by applicable law.
+
+3.5. Where You are acting on behalf of an organization, a written patent infringement claim made by that organization concerning the Software or a Covered Work terminates the patent licenses granted to You for activities undertaken on behalf of that organization, to the extent permitted by applicable law.
+
+3.6. Section 3.4 applies to litigation, formal demands, and other written assertions of patent infringement.
+
+A compulsory defensive counterclaim or response made solely to defend against an existing patent infringement action does not independently trigger termination unless it seeks affirmative relief beyond what is reasonably necessary for that defense.
+
+3.7. Nothing in this Section authorizes activities otherwise prohibited by this License.
+
+4. MANDATORY SOURCE PUBLICATION
+
+4.1. You must make the complete Corresponding Source of every Operational Modification, Derivative Work, or Combined Work available to the public.
+
+4.2. Publication is required regardless of whether the Covered Work is:
+
+(a) Distributed;
+
+(b) Used privately;
+
+(c) Used commercially;
+
+(d) Operated on private infrastructure;
+
+(e) Accessible through a network;
+
+(f) Provided without charge; or
+
+(g) Incorporated into a larger Covered Work.
+
+4.3. Publication must occur before or no later than the first Operational Use of the modified Covered Work.
+
+4.4. Modifications used exclusively for Development Testing do not trigger publication until they are placed into Operational Use or Conveyed.
+
+4.5. When a Covered Work is Conveyed, its complete Corresponding Source must be available at the time of Conveyance.
+
+4.6. Publication must include the complete Corresponding Source of the Covered Work, not merely patches, change descriptions, or differences from the original Software.
+
+4.7. Source code must be provided in its preferred form for modification.
+
+4.8. Intentional obfuscation, encryption, withholding of required build materials, or other measures intended to frustrate modification do not satisfy this Section.
+
+4.9. Material changes to an operational Covered Work must be reflected in the published Corresponding Source no later than deployment of those changes.
+
+4.10. The Public Source Location must permit access without payment, mandatory registration, identity verification, or discretionary approval.
+
+4.11. Access may not be conditioned upon accepting additional contractual restrictions inconsistent with this License.
+
+4.12. CAPTCHA challenges, rate limits, authentication requirements, or other technical restrictions must not materially prevent ordinary users from obtaining the complete Corresponding Source.
+
+4.13. The Corresponding Source must remain publicly available throughout operation of the applicable version and for at least three years following its final Conveyance.
+
+4.14. If the original Public Source Location becomes unavailable, You must establish a replacement location without unreasonable delay.
+
+4.15. You must not knowingly provide incomplete, misleading, or materially outdated Corresponding Source.
+
+4.16. You may not incorporate material into a Covered Work where contractual or licensing restrictions applicable to that material would prevent compliance with the source-publication obligations of this License.
+
+4.17. Where third-party rights prevent publication of required Corresponding Source, You must obtain the necessary permissions or refrain from creating, Conveying, or operating the affected Covered Work.
+
+4.18. Nothing in this Section requires disclosure of independently developed materials outside the scope of the Covered Work or information whose disclosure is prohibited by applicable law.
+
+5. NETWORK SOURCE ACCESS
+
+5.1. Any person interacting with a Covered Work through a network must be provided a clear opportunity to obtain its complete Corresponding Source.
+
+5.2. For a Covered Work with a graphical web interface, a clearly labelled link reading "Source Code" or substantially equivalent wording must be provided in a persistent, readily discoverable location within the interface.
+
+5.3. The link must direct users to the Public Source Location or to a page providing direct access to it.
+
+5.4. A Covered Work may require authentication for access to its functionality. However, the Public Source Location itself must remain accessible without authentication, registration, or other restrictions prohibited by Section 4.
+
+5.5. Where a Covered Work exposes only an application programming interface, the source location must be identified in publicly accessible API documentation or through an appropriately documented endpoint.
+
+5.6. The source-access mechanism must identify the applicable software version or revision.
+
+5.7. A link deliberately concealed, made misleading, or placed where ordinary users cannot reasonably discover it does not satisfy this Section.
+
+5.8. Compliance with this Section does not authorize Third-Party Hosting.
+
+6. COPYLEFT AND COMBINED WORKS
+
+6.1. Every Modified Version and Derivative Work must remain subject to this License.
+
+6.2. Where the Software forms part of a Combined Work, the entire copyright-protected Combined Work must be licensed under this License to the extent that authorization from the applicable Licensor is required.
+
+6.3. The complete Corresponding Source of such a Combined Work must be published under Section 4.
+
+6.4. You may not circumvent these requirements by:
+
+(a) Renaming or rebranding the Software;
+
+(b) Dividing a Covered Work into multiple repositories;
+
+(c) Separating covered components into modules;
+
+(d) Distributing covered components through separate packages;
+
+(e) Incorporating covered code into proprietary derivative applications;
+
+(f) Reorganizing covered functionality into plugins, services, or processes; or
+
+(g) Using another technical arrangement where the resulting work remains subject to the applicable Licensor's copyright rights.
+
+6.5. In determining whether an integrated component forms part of a Combined Work, relevant circumstances may include:
+
+(a) Incorporation of copyright-protected code;
+
+(b) Shared internal implementation;
+
+(c) Modification of covered interfaces or components;
+
+(d) Technical interdependence;
+
+(e) Distribution as an integrated program; and
+
+(f) Whether the integration constitutes a derivative work under applicable law.
+
+6.6. Mere communication through an API, network protocol, or inter-process interface does not automatically establish that independently developed software is a Combined Work.
+
+6.7. Mere aggregation of independent programs does not automatically subject those programs to this License.
+
+6.8. No provision of this License requires the relicensing of independently owned material where authorization from the applicable Licensor is not legally required.
+
+7. REDISTRIBUTION
+
+7.1. You may Convey Covered Works only in compliance with this License.
+
+7.2. Every Conveyance must include:
+
+(a) This License;
+
+(b) Applicable copyright notices;
+
+(c) Notices identifying modifications;
+
+(d) The Corresponding Source or its Public Source Location;
+
+(e) Applicable attribution notices; and
+
+(f) All Required Notices supplied with the Software.
+
+7.3. Modification notices must identify that changes were made and provide the date of the changes.
+
+7.4. Existing copyright, attribution, license, and Required Notices must be preserved.
+
+7.5. Required Notices may identify copyright holders, contributors, attribution requirements, and source locations, but may not impose additional restrictions inconsistent with this License.
+
+7.6. You may not impose additional restrictions that prevent recipients from exercising rights granted under this License.
+
+7.7. Recipients receive applicable rights directly from the relevant Licensors.
+
+7.8. You may charge for physical distribution, technical support, installation assistance, or other separately provided services, provided those activities do not constitute prohibited Third-Party Hosting.
+
+7.9. A service arrangement does not become permitted merely because charges are described as support, maintenance, consulting, infrastructure, or administration fees.
+
+8. HOSTING RESTRICTIONS
+
+8.1. Except as expressly authorized in writing by every applicable rights holder whose permission is required, Third-Party Hosting is prohibited.
+
+8.2. This prohibition applies regardless of whether:
+
+(a) The service is free or paid;
+
+(b) The service generates revenue;
+
+(c) Access is restricted to selected customers;
+
+(d) The service is operated by a nonprofit organization;
+
+(e) The Software is modified or rebranded;
+
+(f) Users interact with the Covered Work directly;
+
+(g) Users interact through an intermediary application;
+
+(h) The Covered Work operates as a backend service;
+
+(i) Hosting is provided for one customer or multiple customers;
+
+(j) The service is described as managed infrastructure, consulting, support, or another arrangement; or
+
+(k) The service is operated through a third-party infrastructure provider.
+
+8.3. Internal Use is permitted, including Internal Use for commercial business operations.
+
+8.4. Access by Authorized Participants does not independently constitute Third-Party Hosting where the Covered Work is operated for the organization's own activities.
+
+8.5. A deployment constitutes Third-Party Hosting where an external organization receives the Covered Work's functionality for its independent operations as a service provided by the operator.
+
+8.6. Third-Party Hosting includes white-label services, managed deployments, hosted applications, and services in which the Covered Work provides substantial functionality through another application.
+
+8.7. The absence of a direct payment or contractual relationship between the operator and end users does not exempt an otherwise prohibited hosted service.
+
+8.8. An organization may use third-party infrastructure providers to host a Covered Work for its own Internal Use, provided the infrastructure provider does not independently offer the Covered Work's functionality as a service to other customers.
+
+8.9. Activities undertaken through affiliates, subsidiaries, parent entities, contractors, intermediaries, or other persons acting on Your behalf shall be considered when determining compliance with this License.
+
+8.10. You may not use organizational, contractual, or technical arrangements to circumvent restrictions that would otherwise apply to Your activities.
+
+8.11. Legitimate Internal Use within Your Organization is permitted, provided the Covered Work is not offered as an independent hosted software service to unaffiliated third parties.
+
+8.12. A Licensor may authorize otherwise prohibited hosting through a separate written agreement.
+
+8.13. Authorization from one rights holder does not override rights held by another.
+
+9. THIRD-PARTY COMPONENTS
+
+9.1. This License does not alter the licenses of independently owned third-party components.
+
+9.2. You are responsible for ensuring that Your use and distribution of third-party components comply with their applicable licenses.
+
+9.3. You may not incorporate components whose licensing conditions prevent compliance with this License unless all necessary rights holders authorize the arrangement.
+
+9.4. A third-party contractual obligation does not independently excuse noncompliance with this License.
+
+10. TRADEMARKS
+
+10.1. No trademark, service mark, trade name, or logo rights are granted except as reasonably necessary for attribution and accurate identification.
+
+10.2. You may not imply endorsement, sponsorship, or affiliation without authorization.
+
+11. TERMINATION AND REINSTATEMENT
+
+11.1. Any violation of this License automatically terminates the rights granted to You by the affected Licensor immediately upon occurrence of the violation.
+
+11.2. For a first violation involving the applicable Licensor and Covered Work, You may qualify for provisional reinstatement by completing a Cure within thirty (30) calendar days after the Notice Date.
+
+11.3. Both the thirty-day cure period and the sixty-day termination-election period begin on the same Notice Date.
+
+11.4. If You complete a Cure within thirty days after the Notice Date, Your rights are provisionally reinstated upon completion of the Cure.
+
+11.5. Notwithstanding Cure or provisional reinstatement, the Licensor may elect to terminate Your rights by dispatching written notice of that election within sixty (60) calendar days after the Notice Date.
+
+11.6. The Licensor may exercise this election regardless of whether the violation was intentional, negligent, inadvertent, cured, or otherwise remedied.
+
+11.7. Termination under Section 11.5 becomes effective upon successful dispatch of the termination election in accordance with Section 12.
+
+11.8. If the violation is fully cured within thirty days and the Licensor does not exercise the termination election within sixty days, provisional reinstatement automatically becomes permanent upon expiration of the sixty-day period.
+
+11.9. Failure to complete a Cure within thirty days results in continued termination without entitlement to automatic reinstatement.
+
+11.10. Any subsequent violation involving the same Licensor and Covered Work results in immediate and permanent termination without notice or an additional cure period.
+
+11.11. The Licensor may voluntarily reinstate terminated rights through express written authorization.
+
+11.12. Discretionary reinstatement may be subject to additional lawful conditions.
+
+11.13. The Licensor may reserve the right to revoke discretionary reinstatement at any time, provided that reservation is expressly stated in the written reinstatement authorization.
+
+11.14. Where such a reservation exists, the Licensor may revoke reinstated rights by written notice.
+
+11.15. Termination does not automatically terminate rights previously granted directly to downstream recipients who remain independently compliant.
+
+11.16. Cure, reinstatement, or termination does not eliminate accrued liability for prior violations.
+
+11.17. Rights arising independently under applicable law are not extinguished by termination of this License.
+
+12. NOTICES
+
+12.1. Notices under this License must be made in writing.
+
+12.2. Notices may be delivered through any written communication method reasonably calculated to reach the intended recipient, including:
+
+(a) Electronic mail;
+
+(b) Direct messaging through an electronic communications platform;
+
+(c) Postal mail or courier service;
+
+(d) Written communications through an established business, organizational, or project communication system; or
+
+(e) Any other written communication method reasonably capable of delivering the Notice to the intended recipient.
+
+12.3. A Notice must be directed to an address, account, or contact method:
+
+(a) Expressly designated for legal or licensing communications;
+
+(b) Publicly identified as a contact method for the recipient;
+
+(c) Previously used by the recipient for communications concerning the relevant Software; or
+
+(d) Otherwise reasonably established as belonging to or being controlled by the intended recipient.
+
+12.4. A public social media post, public communication channel message, or communication directed to an unrelated account does not constitute valid Notice solely because it is publicly accessible.
+
+12.5. The Notice Date is the date of successful dispatch, not the date on which the recipient opens, reads, acknowledges, or responds to the Notice.
+
+12.6. For electronic communications, successful dispatch requires evidence that the message was transmitted to the designated or reasonably established destination without a known delivery failure.
+
+12.7. For physical mail, successful dispatch requires evidence of deposit with an appropriate postal or courier service, addressed to a designated or reasonably established mailing address.
+
+12.8. A message returned as undeliverable, rejected by the destination service, or known not to have reached the designated destination does not establish successful dispatch.
+
+12.9. The sender bears the burden of establishing successful dispatch and the Notice Date.
+
+12.10. All periods are measured in calendar days. The Notice Date is day zero, and the applicable period expires at 23:59:59 in the time zone of the recipient's designated address or principal place of business, where reasonably ascertainable, or otherwise at 23:59:59 UTC.
+
+12.11. If applicable mandatory law requires a different method of service, receipt, or calculation of time, that law prevails to the extent required.
+
+13. DISCLAIMER OF WARRANTY
+
+13.1. TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, THE SOFTWARE IS PROVIDED "AS IS" AND "AS AVAILABLE", WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND.
+
+13.2. ALL EXPRESS OR IMPLIED WARRANTIES AND CONDITIONS, INCLUDING MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, TITLE, AND NON-INFRINGEMENT, ARE DISCLAIMED TO THE MAXIMUM EXTENT PERMITTED BY LAW.
+
+14. LIMITATION OF LIABILITY
+
+14.1. TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, NO LICENSOR OR CONTRIBUTOR SHALL BE LIABLE FOR INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, EXEMPLARY, OR PUNITIVE DAMAGES ARISING FROM THE SOFTWARE OR THIS LICENSE.
+
+14.2. NOTHING IN THIS LICENSE EXCLUDES LIABILITY THAT CANNOT LAWFULLY BE EXCLUDED OR LIMITED.
+
+15. ACCEPTANCE
+
+15.1. Merely receiving or inspecting the Software does not require acceptance of this License.
+
+15.2. By exercising rights requiring authorization under applicable intellectual property law and granted by this License, You accept its terms.
+
+15.3. If You do not accept these terms, You may not exercise rights dependent upon this License.
+
+16. GOVERNING LAW AND JURISDICTION
+
+16.1. Disputes concerning Software licensed under this License shall be governed by the law determined under the applicable conflict-of-laws rules of the court or tribunal properly exercising jurisdiction.
+
+16.2. This License does not designate an exclusive jurisdiction for disputes between independent software copyright holders and licensees.
+
+16.3. Disputes concerning Sleepy Lab Innovations Inc.'s copyright ownership of the official License document are separate from disputes concerning independently licensed Software.
+
+16.4. Nothing in this Section limits mandatory legal protections or jurisdictional requirements that cannot lawfully be excluded.
+
+17. SEVERABILITY
+
+17.1. If any provision is held invalid or unenforceable, the remaining provisions remain effective to the extent permitted by applicable law.
+
+17.2. Invalidity of one provision does not independently expand the permissions granted by the remaining provisions.
+
+18. LICENSE VERSIONS
+
+18.1. This License is Version 1.0 of the SLI Hosting Restricted License.
+
+18.2. Sleepy Lab Innovations Inc. may publish subsequent versions.
+
+18.3. Each version constitutes a separate legal instrument.
+
+18.4. Publication of a subsequent version does not automatically amend this License.
+
+18.5. Unless expressly authorized by the applicable Licensor, recipients may exercise rights only under the version applied to the Software.
+
+19. COPYRIGHT IN THE LICENSE DOCUMENT AND PUBLISHER PROTECTIONS
+
+19.1. The legal text of this License is copyrighted by Sleepy Lab Innovations Inc.
+
+19.2. Permission is granted to reproduce and distribute complete, unmodified copies of this License for the purpose of licensing software and documenting licensing terms.
+
+19.3. No permission is granted to modify, adapt, translate, or create or distribute derivative works of this License document without prior written authorization from Sleepy Lab Innovations Inc.
+
+19.4. Copyright holders adopting this License must identify themselves and the applicable copyright year in a separate copyright notice accompanying the Software. Such notices are not part of the official License document.
+
+19.5. No person may represent a modified document as an official SLI License.
+
+19.6. This Section does not transfer ownership of independently licensed Software to Sleepy Lab Innovations Inc.
+
+19.7. Nothing in this Section restricts independent creation of legal documents or activities permitted by applicable law without authorization.
+
+19.8. DISCLAIMER OF WARRANTIES.
+
+THE LICENSE DOCUMENT IS PROVIDED "AS IS" AND "AS AVAILABLE", WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, EXPRESS OR IMPLIED.
+
+TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, SLEEPY LAB INNOVATIONS INC. MAKES NO REPRESENTATIONS OR WARRANTIES REGARDING THE LICENSE DOCUMENT'S ACCURACY, COMPLETENESS, SUITABILITY, LEGAL VALIDITY, ENFORCEABILITY, EFFECTIVENESS, OR FITNESS FOR ANY PARTICULAR PURPOSE.
+
+19.9. NO LEGAL ADVICE.
+
+THE LICENSE DOCUMENT AND ANY ACCOMPANYING EXPLANATIONS, GUIDANCE, OR DOCUMENTATION ARE PROVIDED FOR GENERAL INFORMATIONAL PURPOSES ONLY AND DO NOT CONSTITUTE LEGAL ADVICE.
+
+SLEEPY LAB INNOVATIONS INC. DOES NOT REPRESENT THAT USE OF THE LICENSE DOCUMENT WILL ACHIEVE ANY PARTICULAR LEGAL OR COMMERCIAL RESULT.
+
+USERS ARE RESPONSIBLE FOR DETERMINING WHETHER THE LICENSE IS APPROPRIATE FOR THEIR PURPOSES AND SHOULD SEEK INDEPENDENT LEGAL ADVICE WHERE APPROPRIATE.
+
+19.10. LIMITATION OF LIABILITY.
+
+TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, SLEEPY LAB INNOVATIONS INC., ITS DIRECTORS, OFFICERS, EMPLOYEES, AGENTS, AND CONTRIBUTORS SHALL NOT BE LIABLE FOR ANY DAMAGES, LOSSES, CLAIMS, COSTS, OR EXPENSES ARISING OUT OF OR RELATING TO THE USE, INTERPRETATION, APPLICATION, RELIANCE UPON, OR ENFORCEABILITY OF THE LICENSE DOCUMENT, INCLUDING ANY ERRORS, OMISSIONS, AMBIGUITIES, UNINTENDED PERMISSIONS, UNENFORCEABLE PROVISIONS, OR FAILURE OF THE LICENSE DOCUMENT TO ACHIEVE ITS INTENDED PURPOSE, REGARDLESS OF THE LEGAL THEORY ASSERTED.
+
+19.11. NO PARTY TO INDEPENDENT LICENSING ARRANGEMENTS.
+
+SLEEPY LAB INNOVATIONS INC. IS NOT A PARTY TO, AND ASSUMES NO RESPONSIBILITY OR OBLIGATION UNDER, ANY LICENSING ARRANGEMENT BETWEEN AN INDEPENDENT COPYRIGHT HOLDER AND A RECIPIENT OF SOFTWARE LICENSED UNDER THIS LICENSE, SOLELY BY REASON OF HAVING AUTHORED, PUBLISHED, MAINTAINED, OR MADE AVAILABLE THE LICENSE DOCUMENT.
+
+ADOPTION OF THIS LICENSE DOES NOT, BY ITSELF, CREATE ANY CONTRACTUAL, FIDUCIARY, AGENCY, PARTNERSHIP, OR OTHER LEGAL RELATIONSHIP BETWEEN SLEEPY LAB INNOVATIONS INC. AND THE PARTIES TO SUCH AN ARRANGEMENT.
+
+EACH LICENSOR REMAINS RESPONSIBLE FOR ITS OWN LICENSING DECISIONS, REPRESENTATIONS, AND ENFORCEMENT ACTIVITIES.
+
+NOTHING IN THIS SECTION LIMITS THE RIGHTS OR OBLIGATIONS OF SLEEPY LAB INNOVATIONS INC. WHERE IT IS ITSELF A LICENSOR OF THE APPLICABLE SOFTWARE OR HAS SEPARATELY ENTERED INTO A BINDING AGREEMENT.
+
+19.12. MANDATORY LAW.
+
+NOTHING IN SECTIONS 19.8 THROUGH 19.11 EXCLUDES OR LIMITS LIABILITY THAT CANNOT LAWFULLY BE EXCLUDED OR LIMITED UNDER APPLICABLE LAW.
+
+20. MULTIPLE LICENSORS
+
+20.1. Each Licensor grants rights only to the extent of its own intellectual property rights.
+
+20.2. No Licensor may grant exceptions affecting another Licensor's independently owned rights without authorization.
+
+20.3. Where a Covered Work contains contributions owned by multiple Licensors, permissions requiring authorization from multiple rights holders must be obtained from each applicable rights holder or an authorized representative.
+
+20.4. A Licensor may appoint an authorized representative to administer licensing permissions and enforcement on its behalf.
+
+20.5. Nothing in this License requires assignment of copyright ownership to Sleepy Lab Innovations Inc. or any other entity.
+
+21. RESERVATION OF RIGHTS
+
+21.1. All rights not expressly granted are reserved by the applicable rights holders.
+
+21.2. Nothing in this License restricts rights that cannot lawfully be restricted.
+
+21.3. Separate written agreements may grant additional permissions without amending the public terms of this License.
+
+END OF TERMS AND CONDITIONS
