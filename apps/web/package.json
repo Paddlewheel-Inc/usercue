@@ -10,11 +10,11 @@
   },
   "dependencies": {
     "@fontsource-variable/geist": "^5.3.0",
-    "@tanstack/react-query": "^5.90.0",
+    "@tanstack/react-query": "^5.105.0",
     "@usercue/shared": "workspace:*",
     "gemoji": "^8.1.0",
-    "react": "^19.1.0",
-    "react-dom": "^19.1.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
     "wouter": "^3.7.0"
   },
   "devDependencies": {

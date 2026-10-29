@@ -11,12 +11,12 @@
     "typecheck": "tsc -p ."
   },
   "dependencies": {
-    "@hono/valibot-validator": "^0.5.3",
+    "@hono/valibot-validator": "^0.6.2",
     "@resvg/resvg-js": "^2.6.2",
     "@usercue/shared": "workspace:*",
-    "hono": "^4.9.0",
+    "hono": "^4.13.14",
     "nodemailer": "^7.0.9",
-    "satori": "^0.57.2",
+    "satori": "^0.63.2",
     "valibot": "^1.1.0"
   },
   "devDependencies": {
