@@ -11,6 +11,7 @@ const insertBoard = db.query<BoardRow>(
 const renameBoard = db.query<BoardRow>(
   "UPDATE boards SET name = ? WHERE slug = ? RETURNING id, slug, name",
 );
+const deleteBoard = db.query<{ id: number }>("DELETE FROM boards WHERE slug = ? RETURNING id");
 
 const slugify = (name: string) =>
   name
@@ -57,5 +58,17 @@ export const boards = new Hono<AppEnv>()
       const board = await renameBoard.get(name, slug);
       if (!board) return c.json({ error: "Board not found" }, 404);
       return c.json(board);
+    },
+  )
+
+  .delete(
+    "/:slug",
+    requirePermission("manage_boards"),
+    vValidator("param", v.object({ slug: v.string() })),
+    async (c) => {
+      const { slug } = c.req.valid("param");
+      const board = await deleteBoard.get(slug);
+      if (!board) return c.json({ error: "Board not found" }, 404);
+      return c.json({ ok: true });
     },
   );

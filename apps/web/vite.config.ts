@@ -77,6 +77,9 @@ export default defineConfig(({ mode }) => {
       allowedHosts: publicHost ? [publicHost] : [],
       port: 5173,
       strictPort: true,
+      watch: {
+        usePolling: env.VITE_USE_POLLING === "true",
+      },
       proxy: {
         "/api": proxy,
         "/uploads": proxy,

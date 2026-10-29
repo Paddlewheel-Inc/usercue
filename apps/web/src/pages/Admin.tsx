@@ -8,7 +8,18 @@ import {
   useState,
 } from "react";
 import { Link, useLocation, useParams, useSearch } from "wouter";
-import { Gear, Heart, Inbox, LogOut, Menu, Pen, Plus, Roadmap, Search } from "../components/icons";
+import {
+  Gear,
+  Heart,
+  Inbox,
+  LogOut,
+  Menu,
+  Pen,
+  Plus,
+  Roadmap,
+  Search,
+  Trash,
+} from "../components/icons";
 import { NotificationBell } from "../components/NotificationBell";
 import { PostDetail } from "../components/PostDetail";
 import { PostRow } from "../components/PostRow";
@@ -21,6 +32,7 @@ import {
   useBoards,
   useCounts,
   useCreateBoard,
+  useDeleteBoard,
   useMe,
   usePosts,
   useRenameBoard,
@@ -241,6 +253,8 @@ function BoardRow({
   canRename: boolean;
 }) {
   const rename = useRenameBoard();
+  const remove = useDeleteBoard();
+  const [, navigate] = useLocation();
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(board.name);
   const done = useRef(false);
@@ -295,22 +309,36 @@ function BoardRow({
         <span className="truncate">{board.name}</span>
       </SidebarLink>
       {canRename && (
-        <button
-          type="button"
-          aria-label={`Rename ${board.name}`}
-          className={`absolute top-1/2 right-1.5 inline-flex size-6 -translate-y-1/2 items-center justify-center rounded-full transition-opacity focus-visible:opacity-100 ${
-            active
-              ? "text-accent-text/70 hover:bg-accent-text/10 hover:text-accent-text"
-              : "text-faint opacity-0 group-hover:opacity-100 hover:bg-hover hover:text-fg"
+        <div
+          className={`absolute top-1/2 right-1.5 flex -translate-y-1/2 rounded-full transition-opacity focus-within:opacity-100 ${
+            active ? "text-accent-text/70" : "text-faint opacity-0 group-hover:opacity-100"
           }`}
-          onClick={() => {
-            done.current = false;
-            setValue(board.name);
-            setEditing(true);
-          }}
         >
-          <Pen width={12} height={12} />
-        </button>
+          <button
+            type="button"
+            aria-label={`Rename ${board.name}`}
+            className="inline-flex size-6 items-center justify-center rounded-full hover:bg-hover hover:text-fg"
+            onClick={() => {
+              done.current = false;
+              setValue(board.name);
+              setEditing(true);
+            }}
+          >
+            <Pen width={12} height={12} />
+          </button>
+          <button
+            type="button"
+            aria-label={`Delete ${board.name}`}
+            className="inline-flex size-6 items-center justify-center rounded-full hover:bg-rose-500/10 hover:text-rose-600"
+            disabled={remove.isPending}
+            onClick={() => {
+              if (confirm(`Delete the ${board.name} board and all its requests?`))
+                remove.mutate(board.slug);
+            }}
+          >
+            <Trash width={12} height={12} />
+          </button>
+        </div>
       )}
     </div>
   );
