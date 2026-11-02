@@ -77,7 +77,7 @@ export function Settings() {
     if (tab.id === "tags") return can(me, "manage_posts") || can(me, "manage_settings");
     if (tab.id === "auth") return can(me, "manage_settings");
     if (tab.id === "users") return can(me, "manage_users");
-    if (tab.id === "api-keys") return can(me, "manage_settings");
+    if (tab.id === "api-keys") return can(me, "dashboard");
     return can(me, "manage_roles");
   });
 
@@ -425,27 +425,31 @@ function ApiKeysSettings() {
                     </p>
                   </div>
                   <div className="flex shrink-0 items-center gap-1">
-                    <button
-                      type="button"
-                      className="btn-quiet h-7 px-2.5"
-                      aria-expanded={editingKeyId === key.id}
-                      onClick={() =>
-                        editingKeyId === key.id
-                          ? setEditingKeyId(null)
-                          : startEditingPermissions(key)
-                      }
-                    >
-                      {editingKeyId === key.id ? "Cancel" : "Edit"}
-                    </button>
-                    <button
-                      type="button"
-                      className="btn-quiet h-7 px-2.5 text-rose-500 hover:bg-rose-500/10 hover:text-rose-500"
-                      disabled={revoke.isPending}
-                      onClick={() => revokeKey(key.id, key.name)}
-                    >
-                      <Trash />
-                      Revoke
-                    </button>
+                    {key.ownerId === me?.user?.id && (
+                      <button
+                        type="button"
+                        className="btn-quiet h-7 px-2.5"
+                        aria-expanded={editingKeyId === key.id}
+                        onClick={() =>
+                          editingKeyId === key.id
+                            ? setEditingKeyId(null)
+                            : startEditingPermissions(key)
+                        }
+                      >
+                        {editingKeyId === key.id ? "Cancel" : "Edit"}
+                      </button>
+                    )}
+                    {key.canRevoke && (
+                      <button
+                        type="button"
+                        className="btn-quiet h-7 px-2.5 text-rose-500 hover:bg-rose-500/10 hover:text-rose-500"
+                        disabled={revoke.isPending}
+                        onClick={() => revokeKey(key.id, key.name)}
+                      >
+                        <Trash />
+                        Revoke
+                      </button>
+                    )}
                   </div>
                 </div>
                 {editingKeyId === key.id && (

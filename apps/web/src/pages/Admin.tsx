@@ -203,7 +203,8 @@ function Sidebar({
           <SidebarLink to="/roadmap" active={false}>
             <Roadmap className="text-faint" /> Roadmap
           </SidebarLink>
-          {(can(me, "manage_settings") ||
+          {(can(me, "dashboard") ||
+            can(me, "manage_settings") ||
             can(me, "manage_branding") ||
             can(me, "manage_posts") ||
             can(me, "manage_staff") ||

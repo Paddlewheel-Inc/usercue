@@ -45,6 +45,7 @@ const countTags = db.query<{ n: number }>("SELECT COUNT(*)::int AS n FROM tags")
 
 interface ApiKeyRow {
   id: number;
+  user_id: number;
   name: string;
   prefix: string;
   permissions: string;
@@ -59,31 +60,45 @@ interface ApiKeyListRow extends ApiKeyRow {
 }
 
 const listApiKeys = db.query<ApiKeyListRow>(
-  `SELECT k.id, k.name, k.prefix, k.permissions, k.created_at, k.last_modified_at, k.last_used_at,
+  `SELECT k.id, k.user_id, k.name, k.prefix, k.permissions, k.created_at, k.last_modified_at, k.last_used_at,
           u.name AS created_by_name, u.avatar_url AS created_by_avatar
    FROM api_keys k
    JOIN users u ON u.id = k.user_id
    WHERE k.user_id = ?
    ORDER BY k.created_at DESC, k.id DESC`,
 );
+const listAllApiKeys = db.query<ApiKeyListRow>(
+  `SELECT k.id, k.user_id, k.name, k.prefix, k.permissions, k.created_at, k.last_modified_at, k.last_used_at,
+          u.name AS created_by_name, u.avatar_url AS created_by_avatar
+   FROM api_keys k
+   JOIN users u ON u.id = k.user_id
+   ORDER BY k.created_at DESC, k.id DESC`,
+);
 const insertApiKey = db.query<ApiKeyRow>(
   `INSERT INTO api_keys (user_id, name, key_hash, prefix, permissions)
    VALUES (?, ?, ?, ?, ?)
-   RETURNING id, name, prefix, permissions, created_at, last_modified_at, last_used_at`,
+   RETURNING id, user_id, name, prefix, permissions, created_at, last_modified_at, last_used_at`,
 );
 const updateApiKeyPermissions = db.query<ApiKeyRow>(
   `UPDATE api_keys
    SET permissions = ?, last_modified_at = EXTRACT(EPOCH FROM NOW())::BIGINT
    WHERE id = ? AND user_id = ?
-   RETURNING id, name, prefix, permissions, created_at, last_modified_at, last_used_at`,
+   RETURNING id, user_id, name, prefix, permissions, created_at, last_modified_at, last_used_at`,
 );
 const deleteApiKey = db.query<{ id: number }>(
   "DELETE FROM api_keys WHERE id = ? AND user_id = ? RETURNING id",
 );
+const deleteAnyApiKey = db.query<{ id: number }>("DELETE FROM api_keys WHERE id = ? RETURNING id");
 
-function serializeApiKey(row: ApiKeyRow, createdBy: { name: string; avatarUrl: string | null }) {
+function serializeApiKey(
+  row: ApiKeyRow,
+  createdBy: { name: string; avatarUrl: string | null },
+  canRevoke: boolean,
+) {
   return {
     id: row.id,
+    ownerId: row.user_id,
+    canRevoke,
     name: row.name,
     prefix: row.prefix,
     permissions: parsePermissions(row.permissions),
@@ -357,23 +372,29 @@ export const settings = new Hono<AppEnv>()
     );
   })
 
-  .get("/api-keys", requirePermission("manage_settings"), async (c) => {
+  .get("/api-keys", requireTeam, async (c) => {
     const user = c.get("user");
     if (!user) return c.json({ error: "Unauthorized" }, 401);
-    const rows = await listApiKeys.all(user.id);
+    if (user.suspended) return c.json({ error: "Your account has been suspended." }, 403);
+    const owner = await isOwnerRole(user.roleId);
+    const rows = owner ? await listAllApiKeys.all() : await listApiKeys.all(user.id);
     return c.json(
       rows.map((row) =>
-        serializeApiKey(row, {
-          name: row.created_by_name,
-          avatarUrl: row.created_by_avatar,
-        }),
+        serializeApiKey(
+          row,
+          {
+            name: row.created_by_name,
+            avatarUrl: row.created_by_avatar,
+          },
+          owner || row.user_id === user.id,
+        ),
       ),
     );
   })
 
   .post(
     "/api-keys",
-    requirePermission("manage_settings"),
+    requireTeam,
     vValidator(
       "json",
       v.object({
@@ -384,6 +405,7 @@ export const settings = new Hono<AppEnv>()
     async (c) => {
       const user = c.get("user");
       if (!user) return c.json({ error: "Unauthorized" }, 401);
+      if (user.suspended) return c.json({ error: "Your account has been suspended." }, 403);
       const { name, permissions: requestedPermissions } = c.req.valid("json");
       const permissions = [...new Set(requestedPermissions)];
       if (permissions.some((permission) => !user.permissions.includes(permission))) {
@@ -403,7 +425,7 @@ export const settings = new Hono<AppEnv>()
       if (!row) throw new Error("API key insert did not return a row");
       return c.json(
         {
-          ...serializeApiKey(row, { name: user.name, avatarUrl: user.avatarUrl }),
+          ...serializeApiKey(row, { name: user.name, avatarUrl: user.avatarUrl }, true),
           key,
         },
         201,
@@ -413,7 +435,7 @@ export const settings = new Hono<AppEnv>()
 
   .patch(
     "/api-keys/:id",
-    requirePermission("manage_settings"),
+    requireTeam,
     vValidator(
       "param",
       v.object({
@@ -430,6 +452,7 @@ export const settings = new Hono<AppEnv>()
     async (c) => {
       const user = c.get("user");
       if (!user) return c.json({ error: "Unauthorized" }, 401);
+      if (user.suspended) return c.json({ error: "Your account has been suspended." }, 403);
       const { id } = c.req.valid("param");
       const requestedPermissions = c.req.valid("json").permissions;
       const permissions = [...new Set(requestedPermissions)];
@@ -441,13 +464,13 @@ export const settings = new Hono<AppEnv>()
       }
       const row = await updateApiKeyPermissions.get(JSON.stringify(permissions), id, user.id);
       if (!row) return c.json({ error: "API key not found" }, 404);
-      return c.json(serializeApiKey(row, { name: user.name, avatarUrl: user.avatarUrl }));
+      return c.json(serializeApiKey(row, { name: user.name, avatarUrl: user.avatarUrl }, true));
     },
   )
 
   .delete(
     "/api-keys/:id",
-    requirePermission("manage_settings"),
+    requireTeam,
     vValidator(
       "param",
       v.object({
@@ -463,8 +486,11 @@ export const settings = new Hono<AppEnv>()
     async (c) => {
       const user = c.get("user");
       if (!user) return c.json({ error: "Unauthorized" }, 401);
+      if (user.suspended) return c.json({ error: "Your account has been suspended." }, 403);
       const { id } = c.req.valid("param");
-      if (!(await deleteApiKey.get(id, user.id))) {
+      const owner = await isOwnerRole(user.roleId);
+      const deleted = owner ? await deleteAnyApiKey.get(id) : await deleteApiKey.get(id, user.id);
+      if (!deleted) {
         return c.json({ error: "API key not found" }, 404);
       }
       return c.json({ ok: true as const });
