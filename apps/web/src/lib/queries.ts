@@ -2,6 +2,7 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tansta
 import type {
   AssignmentMode,
   AuthProviderId,
+  ChangelogPublicationStatus,
   ChangelogReaction,
   Permission,
   Sort,
@@ -195,21 +196,25 @@ function useInvalidateChangelog() {
   return () => qc.invalidateQueries({ queryKey: ["changelog"] });
 }
 
-export const useChangelog = (enabled = true) =>
+export const useChangelog = (enabled = true, staff = false) =>
   useQuery({
-    queryKey: ["changelog"],
+    queryKey: ["changelog", "list", staff],
+    refetchInterval: 30_000,
     queryFn: () => unwrap(api.changelog.$get()),
     enabled,
   });
 
-export const useChangelogEntry = (id: number | undefined) =>
+export const useChangelogEntry = (id: number | undefined, staff = false) =>
   useQuery({
-    queryKey: ["changelog", id],
+    queryKey: ["changelog", id, staff],
+    refetchInterval: 30_000,
     queryFn: () => unwrap(api.changelog[":id"].$get({ param: { id: String(id) } })),
     enabled: id !== undefined,
   });
 
 export interface ChangelogDraft {
+  publicationStatus?: ChangelogPublicationStatus;
+  publishAt?: number;
   title: string;
   body: string;
   postId?: number | null;

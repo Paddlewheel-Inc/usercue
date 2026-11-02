@@ -1,12 +1,15 @@
 import { vValidator } from "@hono/valibot-validator";
 import {
   CHANGELOG_LIMITS,
+  CHANGELOG_PUBLICATION_STATUSES,
   CHANGELOG_REACTION_IDS,
   type ChangelogReaction,
+  changelogPublicationStatus,
   changelogSectionChip,
   changelogSectionLabel,
   isEmptyHtml,
   LIMITS,
+  resolveChangelogPublication,
   sanitizeHtml,
 } from "@usercue/shared";
 import { Hono } from "hono";
@@ -44,7 +47,15 @@ const imageUrl = v.pipe(
   ),
 );
 
+const publicationFields = {
+  publicationStatus: v.optional(v.picklist(CHANGELOG_PUBLICATION_STATUSES)),
+  publishAt: v.optional(
+    v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(8_640_000_000_000)),
+  ),
+};
+
 const entryBody = v.object({
+  ...publicationFields,
   title: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(LIMITS.title)),
   body: v.optional(v.pipe(v.string(), v.maxLength(LIMITS.body)), ""),
   postId: v.optional(postId),
@@ -53,6 +64,7 @@ const entryBody = v.object({
 });
 
 const entryPatch = v.object({
+  ...publicationFields,
   title: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(LIMITS.title))),
   body: v.optional(v.pipe(v.string(), v.maxLength(LIMITS.body))),
   postId: v.optional(postId),
@@ -84,6 +96,7 @@ interface EntryRow {
   linked_title: string | null;
   created_at: number;
   updated_at: number;
+  published_at: number | null;
 }
 
 interface CommentRow {
@@ -144,7 +157,7 @@ interface PersonRow {
 
 const ENTRY_SELECT = `
   SELECT e.id, e.title, e.body, e.author_id, e.author_name, e.post_id, e.image_url,
-         e.created_at, e.updated_at,
+         e.created_at, e.updated_at, e.published_at,
          u.avatar_url AS author_avatar,
          r.name AS author_role_name,
          r.icon_url AS author_role_icon,
@@ -157,15 +170,22 @@ const ENTRY_SELECT = `
   LEFT JOIN posts lp ON lp.id = e.post_id
 `;
 
-const listEntries = db.query<EntryRow>(`${ENTRY_SELECT} ORDER BY e.created_at DESC, e.id DESC`);
+const PUBLIC_ENTRY =
+  "e.published_at IS NOT NULL AND e.published_at <= FLOOR(EXTRACT(EPOCH FROM NOW()))::BIGINT";
+const listEntries = db.query<EntryRow>(
+  `${ENTRY_SELECT} WHERE ${PUBLIC_ENTRY} ORDER BY e.published_at DESC, e.id DESC`,
+);
+const listStaffEntries = db.query<EntryRow>(
+  `${ENTRY_SELECT} ORDER BY COALESCE(e.published_at, e.created_at) DESC, e.id DESC`,
+);
 const findEntry = db.query<EntryRow>(`${ENTRY_SELECT} WHERE e.id = ?`);
 const insertEntry = db.query<{ id: number }>(
-  `INSERT INTO changelog_entries (title, body, author_id, author_name, post_id, image_url)
-   VALUES (?, ?, ?, ?, ?, ?) RETURNING id`,
+  `INSERT INTO changelog_entries (title, body, author_id, author_name, post_id, image_url, published_at)
+   VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id`,
 );
 const updateEntry = db.query(
   `UPDATE changelog_entries
-   SET title = ?, body = ?, post_id = ?, image_url = ?,
+   SET title = ?, body = ?, post_id = ?, image_url = ?, published_at = ?,
        updated_at = EXTRACT(EPOCH FROM NOW())::BIGINT
    WHERE id = ?`,
 );
@@ -347,6 +367,8 @@ function serializeEntry(
     imageUrl: row.image_url.trim() || null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    publishedAt: row.published_at,
+    publicationStatus: changelogPublicationStatus(row.published_at, Math.floor(Date.now() / 1000)),
   };
 }
 
@@ -413,7 +435,7 @@ function feedXml(origin: string, entries: EntryRow[], sections: Map<number, Sect
     .slice(0, 50)
     .map((entry) => {
       const link = `${origin}/changelog/${entry.id}`;
-      const when = new Date(entry.created_at * 1000).toUTCString();
+      const when = new Date((entry.published_at ?? entry.created_at) * 1000).toUTCString();
       const html = entryBodyHtml(entry.body, sections.get(entry.id) ?? []) || entry.title;
       return [
         "<item>",
@@ -459,6 +481,10 @@ async function loadEntry(
 }
 
 export const changelog = new Hono<AppEnv>()
+  .use("*", async (c, next) => {
+    c.header("Cache-Control", "private, no-store");
+    await next();
+  })
   .get("/rss", async (c) => {
     const flags = await changelogFlags();
     if (!flags.enabled) return c.text("Not found", 404);
@@ -466,14 +492,14 @@ export const changelog = new Hono<AppEnv>()
     const xml = feedXml(origin, await listEntries.all(), groupByEntry(await listAllSections.all()));
     return c.body(xml, 200, {
       "Content-Type": "application/rss+xml; charset=utf-8",
-      "Cache-Control": "public, max-age=120",
+      "Cache-Control": "no-cache",
     });
   })
 
   .get("/", async (c) => {
     const flags = await changelogFlags();
     const user = c.get("user");
-    const staff = Boolean(user?.staff);
+    const staff = Boolean(user?.staff && !user.suspended);
     const origin = publicOrigin(c);
     const meta = {
       enabled: flags.enabled,
@@ -491,7 +517,7 @@ export const changelog = new Hono<AppEnv>()
       });
     }
 
-    const rows = await listEntries.all();
+    const rows = staff ? await listStaffEntries.all() : await listEntries.all();
     const reactions = flags.reactions ? await listReactions.all() : [];
     const byEntry = groupByEntry(reactions);
     const sections = groupByEntry(await listAllSections.all());
@@ -524,32 +550,53 @@ export const changelog = new Hono<AppEnv>()
   .post("/", requireTeam, rateLimit(20, 60), vValidator("json", entryBody), async (c) => {
     const user = c.get("user");
     if (!user) return c.json({ error: "Unauthorized" }, 401);
-    const { title, body, postId, imageUrl: banner, contributorIds: credits } = c.req.valid("json");
+    const input = c.req.valid("json");
+    const { title, body, postId, imageUrl: banner, contributorIds: credits } = input;
+    const now = Math.floor(Date.now() / 1000);
+    let publishedAt: number | null;
+    try {
+      publishedAt = resolveChangelogPublication(
+        { ...input, publicationStatus: input.publicationStatus ?? "published" },
+        null,
+        now,
+      );
+    } catch (error) {
+      return c.json({ error: (error as Error).message }, 400);
+    }
     const linked = await linkedPostId(postId);
     if (linked === undefined) return c.json({ error: "That suggestion was not found." }, 400);
     const people = await resolveContributors(credits);
     if (!people) return c.json({ error: "One of those people is no longer here." }, 400);
     const created = await db.transaction(async () => {
-      const row = await insertEntry.get(title, cleanBody(body), user.id, user.name, linked, banner);
+      const row = await insertEntry.get(
+        title,
+        cleanBody(body),
+        user.id,
+        user.name,
+        linked,
+        banner,
+        publishedAt,
+      );
       if (!row) return undefined;
       await writeExtras(row.id, people);
       return row;
     });
-    if (!created) return c.json({ error: "Could not publish that update." }, 500);
+    if (!created) return c.json({ error: "Could not save that update." }, 500);
     const flags = await changelogFlags();
     const entry = await loadEntry(created.id, user.id, flags.reactions, flags.comments);
-    if (!entry) return c.json({ error: "Could not publish that update." }, 500);
+    if (!entry) return c.json({ error: "Could not save that update." }, 500);
     return c.json(entry, 201);
   })
 
   .get("/:id", vValidator("param", idParam), async (c) => {
     const flags = await changelogFlags();
     const user = c.get("user");
-    const staff = Boolean(user?.staff);
+    const staff = Boolean(user?.staff && !user.suspended);
     if (!flags.enabled && !staff) return c.json({ error: "Not found" }, 404);
     const { id } = c.req.valid("param");
     const entry = await loadEntry(id, user?.id ?? null, flags.reactions, flags.comments);
-    if (!entry) return c.json({ error: "Not found" }, 404);
+    if (!entry || (!staff && entry.publicationStatus !== "published"))
+      return c.json({ error: "Not found" }, 404);
     const comments = flags.comments
       ? (await listComments.all(id)).map((row) =>
           serializeComment(row, user ? { id: user.id, staff } : null),
@@ -580,7 +627,9 @@ export const changelog = new Hono<AppEnv>()
         patch.body === undefined &&
         patch.postId === undefined &&
         patch.imageUrl === undefined &&
-        patch.contributorIds === undefined
+        patch.contributorIds === undefined &&
+        patch.publicationStatus === undefined &&
+        patch.publishAt === undefined
       ) {
         return c.json({ error: "Nothing to update." }, 400);
       }
@@ -594,13 +643,23 @@ export const changelog = new Hono<AppEnv>()
       if (patch.contributorIds !== undefined && !people) {
         return c.json({ error: "One of those people is no longer here." }, 400);
       }
+      let publishedAt: number | null;
+      try {
+        publishedAt = resolveChangelogPublication(
+          patch,
+          current.published_at,
+          Math.floor(Date.now() / 1000),
+        );
+      } catch (error) {
+        return c.json({ error: (error as Error).message }, 400);
+      }
       const title = patch.title ?? current.title;
       const banner = patch.imageUrl === undefined ? current.image_url : patch.imageUrl;
       const legacy = await sectionsFor.all(id);
       const body =
         patch.body === undefined ? entryBodyHtml(current.body, legacy) : cleanBody(patch.body);
       await db.transaction(async () => {
-        await updateEntry.run(title, body, linked, banner, id);
+        await updateEntry.run(title, body, linked, banner, publishedAt, id);
         await writeExtras(id, people);
       });
       const flags = await changelogFlags();
@@ -631,7 +690,13 @@ export const changelog = new Hono<AppEnv>()
       if (!flags.enabled && !user.staff) return c.json({ error: "Not found" }, 404);
       if (!flags.comments) return c.json({ error: "Comments are turned off." }, 403);
       const { id } = c.req.valid("param");
-      if (!(await findEntry.get(id))) return c.json({ error: "Not found" }, 404);
+      const target = await findEntry.get(id);
+      if (
+        !target ||
+        changelogPublicationStatus(target.published_at, Math.floor(Date.now() / 1000)) !==
+          "published"
+      )
+        return c.json({ error: "Not found" }, 404);
       const clean = cleanBody(c.req.valid("json").body);
       if (!clean) return c.json({ error: "Comment cannot be empty" }, 400);
       const created = await insertComment.get(id, user.id, user.name, clean, user.staff ? 1 : 0);
@@ -663,6 +728,14 @@ export const changelog = new Hono<AppEnv>()
     if (!flags.enabled && !user.staff) return c.json({ error: "Not found" }, 404);
     if (!flags.comments) return c.json({ error: "Comments are turned off." }, 403);
     const { id, commentId } = c.req.valid("param");
+    const target = await findEntry.get(id);
+    if (
+      !target ||
+      (!user.staff &&
+        changelogPublicationStatus(target.published_at, Math.floor(Date.now() / 1000)) !==
+          "published")
+    )
+      return c.json({ error: "Not found" }, 404);
     const row = await findComment.get(commentId, id);
     if (!row) return c.json({ error: "Not found" }, 404);
     if (!user.staff && row.author_id !== user.id) return c.json({ error: "Forbidden" }, 403);
@@ -684,7 +757,13 @@ export const changelog = new Hono<AppEnv>()
       if (!flags.enabled && !user.staff) return c.json({ error: "Not found" }, 404);
       if (!flags.reactions) return c.json({ error: "Reactions are turned off." }, 403);
       const { id } = c.req.valid("param");
-      if (!(await findEntry.get(id))) return c.json({ error: "Not found" }, 404);
+      const target = await findEntry.get(id);
+      if (
+        !target ||
+        changelogPublicationStatus(target.published_at, Math.floor(Date.now() / 1000)) !==
+          "published"
+      )
+        return c.json({ error: "Not found" }, 404);
       const { reaction } = c.req.valid("json");
       const removed = await removeReaction.get(id, user.id, reaction);
       if (!removed) await addReaction.run(id, user.id, reaction);

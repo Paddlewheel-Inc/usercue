@@ -1,6 +1,7 @@
 import {
   CHANGELOG_LIMITS,
   CHANGELOG_REACTIONS,
+  type ChangelogPublicationStatus,
   type ChangelogReaction,
   isEmptyHtml,
   LIMITS,
@@ -11,10 +12,11 @@ import { Editor, SuggestionPicker } from "../components/Editor";
 import { ChevronLeft, Close, Comment, Hash, Pencil, Plus, Trash } from "../components/icons";
 import { OAuthButtons } from "../components/OAuthButtons";
 import { PostLink, RichText } from "../components/RichText";
+import { Select } from "../components/Select";
 import { Avatar, Empty, ErrorText, PeopleCard, RoleBadge, useHoverCard } from "../components/ui";
 import { useCommentAnchor } from "../lib/anchor";
 import { type ChangelogComment, type ChangelogEntry, uploadImage } from "../lib/api";
-import { longDate, timeAgo } from "../lib/format";
+import { dateTimeLabel, longDate, timeAgo } from "../lib/format";
 import {
   type ChangelogDraft,
   can,
@@ -43,8 +45,12 @@ export function Changelog() {
 function ChangelogList() {
   const { data: me } = useMe();
   const staff = Boolean(me?.user?.staff && !me.user.suspended);
-  const { data, isLoading, isError } = useChangelog(Boolean(me?.changelogEnabled || staff));
+  const { data, isLoading, isError } = useChangelog(Boolean(me?.changelogEnabled || staff), staff);
   const [composing, setComposing] = useState(false);
+  const [view, setView] = useState<ChangelogPublicationStatus>("published");
+  const entries = (data?.entries ?? []).filter(
+    (entry) => entry.publicationStatus === (staff ? view : "published"),
+  );
 
   if (!me?.changelogEnabled && !staff) {
     return <Empty title="Changelog isn't available" />;
@@ -81,14 +87,40 @@ function ChangelogList() {
             )}
           </p>
         )}
+        {staff && (
+          <nav className="flex flex-wrap gap-1" aria-label="Changelog publication status">
+            {(["published", "draft", "scheduled"] as const).map((item) => (
+              <button
+                key={item}
+                type="button"
+                aria-pressed={view === item}
+                onClick={() => setView(item)}
+                className={`inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-[13px] transition-colors ${view === item ? "bg-surface font-medium text-fg shadow-(--shadow)" : "text-muted hover:bg-hover hover:text-fg"}`}
+              >
+                {item === "draft" ? "Drafts" : item === "scheduled" ? "Scheduled" : "Published"}
+                <span className="text-[11px] text-faint tabular-nums">
+                  {data?.entries.filter((entry) => entry.publicationStatus === item).length ?? 0}
+                </span>
+              </button>
+            ))}
+          </nav>
+        )}
         {composing && <EntryForm onDone={() => setComposing(false)} />}
       </header>
 
-      {isLoading || !data ? null : data.entries.length === 0 ? (
-        <Empty title="No updates yet" />
+      {isLoading || !data ? null : entries.length === 0 ? (
+        <Empty
+          title={
+            staff && view === "draft"
+              ? "No drafts yet"
+              : staff && view === "scheduled"
+                ? "No scheduled updates"
+                : "No updates yet"
+          }
+        />
       ) : (
         <ol className="flex flex-col gap-16">
-          {data.entries.map((entry) => (
+          {entries.map((entry) => (
             <li key={entry.id}>
               <FeedEntry entry={entry} staff={staff} commentsEnabled={data.commentsEnabled} />
             </li>
@@ -136,7 +168,7 @@ function FeedEntry({
       deleting={remove.isPending}
       deleteError={remove.error}
     >
-      {commentsEnabled && (
+      {commentsEnabled && entry.publicationStatus === "published" && (
         <Link
           href={`/changelog/${entry.id}#comments`}
           className="mt-4 inline-flex w-fit items-center gap-1.5 text-[13px] text-muted transition-colors hover:text-fg"
@@ -154,6 +186,7 @@ function EntryPage({ id }: { id: number }) {
   const staff = Boolean(me?.user?.staff && !me.user.suspended);
   const { data, isLoading, isError } = useChangelogEntry(
     me?.changelogEnabled || staff ? id : undefined,
+    staff,
   );
   const update = useUpdateChangelogEntry(id);
   const remove = useDeleteChangelogEntry(id);
@@ -196,7 +229,7 @@ function EntryPage({ id }: { id: number }) {
           deleting={remove.isPending}
           deleteError={remove.error}
         >
-          {data.reactionsEnabled && (
+          {data.reactionsEnabled && data.publicationStatus === "published" && (
             <div className="mt-5">
               <Reactions id={id} reactions={data.reactions} />
             </div>
@@ -204,7 +237,7 @@ function EntryPage({ id }: { id: number }) {
         </PublishedEntry>
       )}
 
-      {data.commentsEnabled && (
+      {data.commentsEnabled && data.publicationStatus === "published" && (
         <div className={editing ? undefined : "sm:pl-[calc(9.5rem+3rem)]"}>
           <Comments id={id} comments={data.comments} />
         </div>
@@ -237,12 +270,18 @@ function PublishedEntry({
   const Title = heading;
   return (
     <article className="grid grid-cols-1 gap-3 sm:grid-cols-[9.5rem_minmax(0,1fr)] sm:gap-x-12">
-      <time
-        dateTime={new Date(entry.createdAt * 1000).toISOString()}
-        className="text-[13px] leading-6 text-muted sm:pt-1"
-      >
-        {longDate(entry.createdAt)}
-      </time>
+      <div className="flex flex-col gap-1 text-[13px] leading-6 text-muted sm:pt-1">
+        {entry.publicationStatus !== "published" && (
+          <span className="w-fit rounded-full bg-accent-soft px-2.5 py-0.5 text-[11px] font-medium text-accent-text">
+            {entry.publicationStatus === "draft" ? "Draft · staff only" : "Scheduled · staff only"}
+          </span>
+        )}
+        <time dateTime={new Date((entry.publishedAt ?? entry.createdAt) * 1000).toISOString()}>
+          {entry.publicationStatus === "scheduled" && entry.publishedAt !== null
+            ? dateTimeLabel(entry.publishedAt)
+            : longDate(entry.publishedAt ?? entry.createdAt)}
+        </time>
+      </div>
       <div className="min-w-0">
         <div className="flex items-start justify-between gap-4">
           <Title
@@ -499,6 +538,11 @@ function ContributorFields({
   );
 }
 
+function localPublicationTime(timestamp: number) {
+  const date = new Date(timestamp * 1000);
+  return new Date(date.getTime() - date.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
+}
+
 function EntryForm({
   entry,
   pending,
@@ -520,12 +564,25 @@ function EntryForm({
   const [linked, setLinked] = useState(entry?.linkedPost ?? null);
   const [imageUrl, setImageUrl] = useState(entry?.imageUrl ?? "");
   const [picking, setPicking] = useState(false);
+  const [publicationStatus, setPublicationStatus] = useState<ChangelogPublicationStatus>(
+    entry?.publicationStatus ?? "draft",
+  );
+  const [schedule, setSchedule] = useState(
+    entry?.publicationStatus === "scheduled" && entry.publishedAt !== null
+      ? localPublicationTime(entry.publishedAt)
+      : "",
+  );
+  const [preview, setPreview] = useState(false);
   const busy = pending ?? create.isPending;
   const failure = error === undefined ? create.error : error;
 
   function submit(e: FormEvent) {
     e.preventDefault();
-    const next = {
+    const next: ChangelogDraft = {
+      publicationStatus,
+      ...(publicationStatus === "scheduled"
+        ? { publishAt: Math.floor(new Date(schedule).getTime() / 1000) }
+        : {}),
       title: title.trim(),
       body,
       postId: linked?.id ?? null,
@@ -556,15 +613,31 @@ function EntryForm({
         required
       />
       <div className="flex flex-col gap-3 px-4 pb-3">
-        <Editor
-          value={body}
-          onChange={setBody}
-          placeholder="What changed?  Type / for New, Fixed, Removed…  # to link a suggestion"
-          maxLength={LIMITS.body}
-          mentions
-          headings
-          sections
-        />
+        {preview ? (
+          <div className="flex flex-col gap-3 rounded-2xl bg-bg p-4">
+            <span className="text-[11px] font-medium text-muted">Preview · not published</span>
+            <h2 className="text-lg font-semibold tracking-tight">{title || "Untitled update"}</h2>
+            {linked && <PostLink id={linked.id} title={linked.title} />}
+            <div className="changelog-body">
+              <RichText html={body} />
+            </div>
+            {contributors.length > 0 && (
+              <p className="text-[12px] text-muted">
+                Contributors: {contributors.map((person) => person.name).join(", ")}
+              </p>
+            )}
+          </div>
+        ) : (
+          <Editor
+            value={body}
+            onChange={setBody}
+            placeholder="What changed?  Type / for New, Fixed, Removed…  # to link a suggestion"
+            maxLength={LIMITS.body}
+            mentions
+            headings
+            sections
+          />
+        )}
         <ContributorFields people={contributors} onChange={setContributors} />
         <BannerField value={imageUrl} onChange={setImageUrl} />
         <FeedbackLink
@@ -578,14 +651,78 @@ function EntryForm({
           onToggle={() => setPicking((open) => !open)}
           onClose={() => setPicking(false)}
         />
-        <div className="flex items-center gap-2 border-t pt-3">
+        <div className="flex flex-col gap-2 border-t pt-3">
+          <div className="flex flex-col gap-1.5">
+            <span className="text-[11px] text-muted">Publication</span>
+            <Select
+              label="Publication"
+              value={publicationStatus}
+              disabled={busy}
+              onChange={setPublicationStatus}
+              options={[
+                { value: "draft", label: "Save as draft" },
+                {
+                  value: "published",
+                  label:
+                    entry?.publicationStatus === "published" ? "Keep published" : "Publish now",
+                },
+                { value: "scheduled", label: "Schedule for later" },
+              ]}
+            />
+          </div>
+          {publicationStatus === "scheduled" ? (
+            <label className="flex flex-col gap-1.5">
+              <span className="text-[11px] text-muted">Publish date and time</span>
+              <input
+                type="datetime-local"
+                className="input"
+                value={schedule}
+                min={localPublicationTime(Math.floor(Date.now() / 1000) + 60)}
+                required
+                disabled={busy}
+                onChange={(event) => setSchedule(event.target.value)}
+              />
+              <span className="text-[11px] text-muted">
+                Your time zone: {Intl.DateTimeFormat().resolvedOptions().timeZone}. Visible only to
+                staff until this time.
+              </span>
+            </label>
+          ) : (
+            <p className="text-[11px] text-muted">
+              {publicationStatus === "draft"
+                ? "Drafts are visible only to staff. You can return to edit and publish later."
+                : "This update will appear in the public changelog when it is enabled."}
+            </p>
+          )}
+        </div>
+        <div className="flex flex-wrap items-center gap-2 border-t pt-3">
           <ErrorText error={failure} />
+          <button
+            type="button"
+            className="btn-quiet"
+            aria-pressed={preview}
+            onClick={() => setPreview((value) => !value)}
+          >
+            {preview ? "Back to editor" : "Preview"}
+          </button>
           <div className="flex-1" />
           <button type="button" className="btn-quiet" onClick={onDone}>
             Cancel
           </button>
-          <button type="submit" className="btn-primary" disabled={busy || !title.trim()}>
-            {entry ? "Save" : "Publish"}
+          <button
+            type="submit"
+            className="btn-primary"
+            disabled={busy || !title.trim() || (publicationStatus === "scheduled" && !schedule)}
+          >
+            {busy
+              ? "Saving…"
+              : publicationStatus === "draft"
+                ? "Save draft"
+                : publicationStatus === "scheduled"
+                  ? "Schedule update"
+                  : entry?.publicationStatus === "published"
+                    ? "Save changes"
+                    : "Publish now"}
           </button>
         </div>
       </div>
