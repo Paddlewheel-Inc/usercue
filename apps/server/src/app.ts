@@ -13,9 +13,11 @@ import { posts } from "./routes/posts";
 import { settings } from "./routes/settings";
 import { tags } from "./routes/tags";
 import { uploads } from "./routes/uploads";
+import { workflow } from "./routes/workflow";
 
 const publicApi = new Hono<AppEnv>()
   .use("*", requireApiKey)
+  .route("/workflow", workflow)
   .route("/boards", boards)
   .route("/posts", posts)
   .route("/tags", tags)
@@ -28,6 +30,7 @@ const api = new Hono<AppEnv>()
   .route("/v1", publicApi)
   .route("/auth", auth)
   .route("/auth", oauth)
+  .route("/workflow", workflow)
   .route("/boards", boards)
   .route("/posts", posts)
   .route("/changelog", changelog)

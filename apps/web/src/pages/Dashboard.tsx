@@ -1,11 +1,13 @@
-import { STATUS_LABELS, STATUSES, type Status } from "@usercue/shared";
+import { type Status } from "@usercue/shared";
 import { Fragment } from "react";
 import { Link } from "wouter";
 import { ArrowUp, Heart } from "../components/icons";
-import { Avatar, STATUS_INK, TagChip } from "../components/ui";
+import { Avatar, TagChip } from "../components/ui";
+import { StatusIcon, StatusName } from "../components/WorkflowIcon";
 import type { Post } from "../lib/api";
 import { excerpt, timeAgo } from "../lib/format";
 import { can, useCounts, useMe, usePosts, useWorkspaceUsers } from "../lib/queries";
+import { useWorkflow } from "../lib/workflow";
 import { AdminShell } from "./Admin";
 
 const today = new Intl.DateTimeFormat("en", {
@@ -26,13 +28,22 @@ function DashboardHome() {
   const { data: me } = useMe();
   const { data: counts } = useCounts();
   const { data: recent } = usePosts({ sort: "new" });
-  const { data: doing } = usePosts({ status: "in_progress", sort: "new" });
+  const { data: doing } = usePosts({ category: "in_progress", sort: "new" });
   const canSeeUsers = can(me, "manage_users");
   const { data: people } = useWorkspaceUsers(canSeeUsers);
 
   const first = me?.user?.name.split(/\s+/)[0] ?? "there";
-  const tally = counts ?? emptyCounts();
-  const total = STATUSES.reduce((sum, status) => sum + tally[status], 0);
+  const { statuses } = useWorkflow();
+  const tally = counts ?? {};
+  const total = Object.values(tally).reduce((sum, count) => sum + count, 0);
+  const stages = Object.fromEntries(
+    ["open", "planned", "in_progress", "complete", "closed"].map((category) => [
+      category,
+      statuses
+        .filter((item) => item.category === category)
+        .reduce((sum, item) => sum + (tally[item.id] ?? 0), 0),
+    ]),
+  );
   const newest = (people?.users ?? []).slice(0, 5);
   const latest = (recent ?? []).slice(0, 7);
   const active = (doing ?? []).slice(0, 5);
@@ -49,7 +60,9 @@ function DashboardHome() {
             {today.format(new Date())}
           </p>
           <h1 className="mt-2 text-[28px] leading-8 font-semibold tracking-tight">Hey, {first}.</h1>
-          <p className="mt-2 max-w-md text-[14px] leading-6 text-muted">{headline(total, tally)}</p>
+          <p className="mt-2 max-w-md text-[14px] leading-6 text-muted">
+            {headline(total, stages)}
+          </p>
         </header>
 
         <HeartLane counts={tally} />
@@ -92,25 +105,24 @@ function DashboardHome() {
   );
 }
 
-function emptyCounts(): Record<Status, number> {
-  return Object.fromEntries(STATUSES.map((status) => [status, 0])) as Record<Status, number>;
-}
-
 function headline(total: number, counts: Record<Status, number>) {
   if (total === 0) return "Nobody’s written in yet. The board’s all yours.";
-  if (counts.in_progress > 0) {
+  if ((counts.in_progress ?? 0) > 0) {
     return `${counts.in_progress} in motion, ${counts.open} still waiting for a cue.`;
   }
-  if (counts.open > 0) return `${total} notes on the board. A few are waiting to be picked up.`;
+  if ((counts.open ?? 0) > 0)
+    return `${total} notes on the board. A few are waiting to be picked up.`;
   return `${total} notes on the board. Go poke around.`;
 }
 
 function HeartLane({ counts }: { counts: Record<Status, number> }) {
+  const { statuses } = useWorkflow();
   return (
-    <div className="card flex items-start px-3 py-4 sm:px-5">
-      {STATUSES.map((status, i) => {
-        const n = counts[status];
-        const live = status === "in_progress" && n > 0;
+    <div className="card flex items-start overflow-x-auto px-3 py-4 sm:px-5">
+      {statuses.map((item, i) => {
+        const status = item.id;
+        const n = counts[status] ?? 0;
+        const live = item.category === "in_progress" && n > 0;
         return (
           <Fragment key={status}>
             {i > 0 && (
@@ -123,17 +135,12 @@ function HeartLane({ counts }: { counts: Record<Status, number> }) {
               href={`/admin/requests?status=${status}`}
               className="relative z-10 flex min-w-0 flex-1 flex-col items-center gap-1 py-0.5 text-center sm:w-[4.5rem] sm:flex-none"
             >
-              <span className={`${STATUS_INK[status]} ${live ? "animate-stop" : ""}`}>
-                <Heart
-                  width={16}
-                  height={16}
-                  fill={n > 0 ? "currentColor" : "none"}
-                  stroke={n > 0 ? "none" : "currentColor"}
-                />
+              <span className={live ? "animate-stop" : ""}>
+                <StatusIcon status={status} size={16} filled={n > 0} />
               </span>
               <span className="text-[18px] leading-none font-semibold tabular-nums">{n}</span>
               <span className="max-w-full truncate text-[11px] text-muted">
-                {STATUS_LABELS[status]}
+                <StatusName status={status} />
               </span>
             </Link>
           </Fragment>
@@ -252,11 +259,9 @@ function Ticket({ post }: { post: Post }) {
         className="card lift flex h-full flex-col gap-3 p-4"
       >
         <div className="flex items-start justify-between gap-3">
-          <span
-            className={`inline-flex items-center gap-1.5 text-[11px] font-medium ${STATUS_INK[post.status]}`}
-          >
-            <Heart width={12} height={12} fill="currentColor" stroke="none" />
-            {STATUS_LABELS[post.status]}
+          <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-muted">
+            <StatusIcon status={post.status} size={12} />
+            <StatusName status={post.status} />
           </span>
           <span className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-hover px-2 py-0.5 text-[11px] font-semibold text-muted tabular-nums">
             <ArrowUp width={11} height={11} />

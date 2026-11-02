@@ -16,6 +16,7 @@ export type { AuthProvider };
 export interface PostFilters {
   board?: string;
   status?: Status;
+  category?: "open" | "planned" | "in_progress" | "complete" | "closed";
   sort?: Sort;
   q?: string;
 }

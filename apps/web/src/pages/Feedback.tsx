@@ -1,4 +1,4 @@
-import { type Sort, STATUS_LABELS, STATUSES, type Status } from "@usercue/shared";
+import { type Sort, type Status } from "@usercue/shared";
 import { useDeferredValue, useState } from "react";
 import { Link, useParams, useSearch } from "wouter";
 import { Search } from "../components/icons";
@@ -6,6 +6,7 @@ import { PostForm } from "../components/PostForm";
 import { PostRow } from "../components/PostRow";
 import { Empty } from "../components/ui";
 import { useBoards, useCounts, usePosts } from "../lib/queries";
+import { useWorkflow } from "../lib/workflow";
 
 const SORT_OPTIONS: { value: Sort; label: string }[] = [
   { value: "top", label: "Top" },
@@ -13,6 +14,7 @@ const SORT_OPTIONS: { value: Sort; label: string }[] = [
 ];
 
 export function Feedback() {
+  const { statuses } = useWorkflow();
   const params = useParams<{ board?: string }>();
   const { data: boards = [] } = useBoards();
   const [sort, setSort] = useState<Sort>("top");
@@ -52,16 +54,21 @@ export function Feedback() {
           <Filter active={!status} onClick={() => setStatus(undefined)}>
             All
           </Filter>
-          {STATUSES.filter((s) => s !== "closed").map((s) => (
-            <Filter
-              key={s}
-              active={status === s}
-              onClick={() => setStatus(status === s ? undefined : s)}
-              count={counts?.[s]}
-            >
-              {STATUS_LABELS[s]}
-            </Filter>
-          ))}
+          {statuses
+            .filter((s) => s.category !== "closed")
+            .map((item) => {
+              const s = item.id;
+              return (
+                <Filter
+                  key={s}
+                  active={status === s}
+                  onClick={() => setStatus(status === s ? undefined : s)}
+                  count={counts?.[s]}
+                >
+                  {item.name}
+                </Filter>
+              );
+            })}
         </div>
 
         <div className="flex items-center gap-2">

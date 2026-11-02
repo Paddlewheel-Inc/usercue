@@ -35,7 +35,8 @@ import {
   NumberedList,
   Underline,
 } from "./icons";
-import { Avatar, RoleBadge, STATUS_DOT } from "./ui";
+import { Avatar, RoleBadge } from "./ui";
+import { StatusIcon } from "./WorkflowIcon";
 
 interface EditorProps {
   value: string;
@@ -1132,9 +1133,9 @@ export function SuggestionPicker({
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => onPick(post.id, post.title)}
             >
-              <span
-                className={`mt-1.5 size-1.5 shrink-0 rounded-full ${STATUS_DOT[post.status]}`}
-              />
+              <span className="mt-1">
+                <StatusIcon status={post.status} size={12} />
+              </span>
               <span className="min-w-0">
                 <span className="block truncate text-[13px] font-medium">{post.title}</span>
                 <span className="block truncate text-[11px] text-faint">{post.authorName}</span>

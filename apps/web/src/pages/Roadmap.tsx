@@ -1,16 +1,12 @@
-import { STATUS_LABELS, type Status } from "@usercue/shared";
+import { type Status } from "@usercue/shared";
 import { Link } from "wouter";
 import { Plus } from "../components/icons";
-import { Avatar, STATUS_DOT, TagChip, VoteButton } from "../components/ui";
+import { Avatar, TagChip, VoteButton } from "../components/ui";
+import { StatusIcon, StatusName } from "../components/WorkflowIcon";
 import type { Post } from "../lib/api";
 import { excerpt } from "../lib/format";
 import { usePosts, useVote } from "../lib/queries";
-
-const LANES: { status: Status; hint: string }[] = [
-  { status: "planned", hint: "What we're doing next" },
-  { status: "in_progress", hint: "In motion right now" },
-  { status: "complete", hint: "Recently shipped" },
-];
+import { useWorkflow } from "../lib/workflow";
 
 function hueFor(name: string): number {
   return [...name].reduce((h, c) => (h * 31 + c.charCodeAt(0)) % 360, 7);
@@ -59,7 +55,7 @@ function Card({ post, index }: { post: Post; index: number }) {
   );
 }
 
-function Lane({ status, hint }: (typeof LANES)[number]) {
+function Lane({ status, hint }: { status: Status; hint: string }) {
   const { data: posts = [] } = usePosts({ status });
 
   return (
@@ -67,8 +63,8 @@ function Lane({ status, hint }: (typeof LANES)[number]) {
       <header className="mb-3 flex items-baseline justify-between gap-2 px-2 pt-1">
         <div>
           <h2 className="flex items-center gap-2 text-[13px] font-medium">
-            <span className={`size-1.5 rounded-full ${STATUS_DOT[status]}`} />
-            {STATUS_LABELS[status]}
+            <StatusIcon status={status} />
+            <StatusName status={status} />
             <span className="text-faint tabular-nums">{posts.length}</span>
           </h2>
           <p className="mt-1 text-xs text-muted">{hint}</p>
@@ -87,6 +83,10 @@ function Lane({ status, hint }: (typeof LANES)[number]) {
 }
 
 export function Roadmap() {
+  const { statuses } = useWorkflow();
+  const lanes = statuses.filter((item) =>
+    ["planned", "in_progress", "complete"].includes(item.category),
+  );
   return (
     <div className="flex flex-col gap-8">
       <div className="flex items-end justify-between gap-4">
@@ -99,8 +99,18 @@ export function Roadmap() {
         </Link>
       </div>
       <div className="grid items-start gap-4 md:grid-cols-3">
-        {LANES.map((lane) => (
-          <Lane key={lane.status} {...lane} />
+        {lanes.map((lane) => (
+          <Lane
+            key={lane.id}
+            status={lane.id}
+            hint={
+              lane.category === "planned"
+                ? "What we?re doing next"
+                : lane.category === "in_progress"
+                  ? "In motion right now"
+                  : "Recently shipped"
+            }
+          />
         ))}
       </div>
     </div>
