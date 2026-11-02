@@ -3,7 +3,8 @@ import type { Post } from "../lib/api";
 import { shortDate } from "../lib/format";
 import { useVote } from "../lib/queries";
 import { Comment } from "./icons";
-import { Avatar, RoleBadge, STATUS_DOT, TagChip, VoteButton } from "./ui";
+import { Avatar, RoleBadge, TagChip, VoteButton } from "./ui";
+import { StatusIcon } from "./WorkflowIcon";
 
 interface PostRowProps {
   post: Post;
@@ -45,9 +46,7 @@ export function PostRow({ post, href, active = false, compact = false, index = 0
             )}
             <span className="text-faint">·</span>
             <span className="shrink-0">{shortDate(post.createdAt)}</span>
-            {post.status !== "open" && (
-              <span className={`size-1.5 rounded-full ${STATUS_DOT[post.status]}`} />
-            )}
+            {post.status !== "open" && <StatusIcon status={post.status} size={12} />}
             {post.commentCount > 0 && (
               <span className="inline-flex items-center gap-0.5 text-faint">
                 <Comment width={11} height={11} />
@@ -94,7 +93,7 @@ export function PostRow({ post, href, active = false, compact = false, index = 0
           {post.status !== "open" && (
             <>
               <span className="text-faint">·</span>
-              <span className={`size-1.5 rounded-full ${STATUS_DOT[post.status]}`} />
+              <StatusIcon status={post.status} size={12} />
             </>
           )}
         </div>

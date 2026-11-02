@@ -4,7 +4,8 @@ import { createPortal } from "react-dom";
 import { useLocation } from "wouter";
 import { excerpt, postIdFromHref, timeAgo } from "../lib/format";
 import { usePost } from "../lib/queries";
-import { Avatar, STATUS_DOT } from "./ui";
+import { Avatar } from "./ui";
+import { StatusIcon } from "./WorkflowIcon";
 
 function useSuggestionPreview() {
   const [preview, setPreview] = useState<{ id: number; x: number; y: number } | null>(null);
@@ -174,7 +175,7 @@ function SuggestionPreview({
           <div className="flex items-start gap-2">
             <p className="min-w-0 flex-1 text-[13px] leading-5 font-medium">{post.title}</p>
             <span className="mt-1.5 inline-flex items-center gap-1 text-[11px] text-muted tabular-nums">
-              <span className={`size-1.5 rounded-full ${STATUS_DOT[post.status]}`} />
+              <StatusIcon status={post.status} size={12} />
               {post.voteCount}
             </span>
           </div>

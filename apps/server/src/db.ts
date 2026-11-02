@@ -338,6 +338,22 @@ const SCHEMA = `
 `;
 
 const MIGRATE = `
+  CREATE TABLE IF NOT EXISTS workflow_statuses (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    icon TEXT NOT NULL,
+    color TEXT NOT NULL,
+    category TEXT NOT NULL CHECK (category IN ('open', 'planned', 'in_progress', 'complete', 'closed')),
+    position INTEGER NOT NULL
+  );
+  INSERT INTO workflow_statuses (id, name, icon, color, category, position) VALUES
+    ('open', 'Open', 'default', '#a8a29e', 'open', 0),
+    ('planned', 'Planned', 'default', '#0ea5e9', 'planned', 1),
+    ('in_progress', 'In Progress', 'default', '#8b5cf6', 'in_progress', 2),
+    ('complete', 'Complete', 'default', '#10b981', 'complete', 3),
+    ('closed', 'Closed', 'default', '#fb7185', 'closed', 4)
+  ON CONFLICT (id) DO NOTHING;
+
   ALTER TABLE votes ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id) ON DELETE SET NULL;
 
   CREATE TABLE IF NOT EXISTS status_changes (

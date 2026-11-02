@@ -51,9 +51,11 @@ import {
   useWorkspaceUsers,
 } from "../lib/queries";
 import { AdminShell } from "./Admin";
+import { WorkflowSettings } from "./WorkflowSettings";
 
 const TABS = [
   { id: "general", href: "/admin/settings", label: "General" },
+  { id: "workflow", href: "/admin/settings/workflow", label: "Workflow" },
   { id: "branding", href: "/admin/settings/branding", label: "Branding" },
   { id: "tags", href: "/admin/settings/tags", label: "Tags" },
   { id: "auth", href: "/admin/settings/auth", label: "Authentication" },
@@ -73,6 +75,7 @@ export function Settings() {
 
   const visible = TABS.filter((tab) => {
     if (tab.id === "general") return can(me, "manage_settings") || can(me, "manage_staff");
+    if (tab.id === "workflow") return can(me, "manage_settings");
     if (tab.id === "branding") return can(me, "manage_branding");
     if (tab.id === "tags") return can(me, "manage_posts") || can(me, "manage_settings");
     if (tab.id === "auth") return can(me, "manage_settings");
@@ -119,6 +122,8 @@ export function Settings() {
           </header>
           {tab === "auth" ? (
             <AuthSettings />
+          ) : tab === "workflow" ? (
+            <WorkflowSettings />
           ) : tab === "branding" ? (
             <BrandingSettings />
           ) : tab === "tags" ? (
@@ -880,6 +885,7 @@ function CustomAccent({
         <input
           type="color"
           value={normalized ?? presetHex}
+          onChange={(e) => setHex(e.target.value)}
           disabled={disabled}
           className="size-full cursor-pointer appearance-none rounded-full border-0 bg-transparent p-0 [&::-webkit-color-swatch-wrapper]:p-0 [&::-webkit-color-swatch]:rounded-full [&::-webkit-color-swatch]:border-0"
         />
@@ -1156,8 +1162,9 @@ function BrandingSettings() {
       </section>
 
       <section className="flex flex-col gap-3">
-        <SectionHead title="Color">
-          The accent on buttons, links, and hearts. Pink is the UserCue default.
+        <SectionHead title="Workspace palette">
+          Give your workspace a calm wash of color, from backgrounds and cards to borders, buttons,
+          and links. Each palette adapts to light and dark mode. Pink is the UserCue default.
         </SectionHead>
         <div className="flex flex-wrap gap-2">
           {ACCENTS.map((color) => {

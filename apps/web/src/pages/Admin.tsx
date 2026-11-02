@@ -1,4 +1,4 @@
-import { STATUS_LABELS, STATUSES, type Status } from "@usercue/shared";
+import { type Status } from "@usercue/shared";
 import {
   type FormEvent,
   type ReactNode,
@@ -25,7 +25,8 @@ import { PostDetail } from "../components/PostDetail";
 import { PostRow } from "../components/PostRow";
 import { Logo } from "../components/PublicLayout";
 import { ThemeToggle } from "../components/ThemeToggle";
-import { Avatar, Empty, RoleBadge, STATUS_INK } from "../components/ui";
+import { Avatar, Empty, RoleBadge } from "../components/ui";
+import { StatusIcon, StatusName } from "../components/WorkflowIcon";
 import {
   can,
   useAuth,
@@ -37,6 +38,7 @@ import {
   usePosts,
   useRenameBoard,
 } from "../lib/queries";
+import { useWorkflow } from "../lib/workflow";
 
 interface Filter {
   status?: Status;
@@ -47,7 +49,7 @@ function parseFilter(search: string): Filter {
   const params = new URLSearchParams(search);
   const status = params.get("status");
   return {
-    status: STATUSES.find((s) => s === status),
+    status: status || undefined,
     board: params.get("board") ?? undefined,
   };
 }
@@ -124,6 +126,7 @@ function Sidebar({
 }) {
   const { data: me } = useMe();
   const { data: boards = [] } = useBoards();
+  const { statuses } = useWorkflow();
   const { data: counts } = useCounts(filter.board);
   const { logout } = useAuth();
   const [, navigate] = useLocation();
@@ -173,7 +176,8 @@ function Sidebar({
           <SidebarLink to={href({ board: filter.board })} active={allActive} count={total}>
             <Inbox className={allActive ? "text-accent" : "text-faint"} /> All
           </SidebarLink>
-          {STATUSES.map((status) => {
+          {statuses.map((item) => {
+            const status = item.id;
             const n = counts?.[status] ?? 0;
             const on = !dashboard && !settings && filter.status === status;
             return (
@@ -183,15 +187,8 @@ function Sidebar({
                 active={on}
                 count={n}
               >
-                <span className={STATUS_INK[status]}>
-                  <Heart
-                    width={13}
-                    height={13}
-                    fill={n > 0 ? "currentColor" : "none"}
-                    stroke={n > 0 ? "none" : "currentColor"}
-                  />
-                </span>
-                {STATUS_LABELS[status]}
+                <StatusIcon status={status} filled={n > 0} />
+                {item.name}
               </SidebarLink>
             );
           })}
@@ -430,7 +427,7 @@ function RequestList({ filter, selected }: { filter: Filter; selected?: number }
     >
       <header className="flex h-14 shrink-0 items-center justify-between gap-3 px-5">
         <h2 className="flex items-baseline gap-2 text-[15px] font-semibold tracking-tight">
-          {filter.status ? STATUS_LABELS[filter.status] : "Requests"}
+          {filter.status ? <StatusName status={filter.status} /> : "Requests"}
           {shown !== undefined && (
             <span className="text-[13px] font-medium text-faint tabular-nums">{shown}</span>
           )}

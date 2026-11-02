@@ -1,5 +1,5 @@
 import { Resvg } from "@resvg/resvg-js";
-import { ACCENTS, isHexColor, STATUS_LABELS, type Status, stripHtml } from "@usercue/shared";
+import { ACCENTS, isHexColor, type Status, stripHtml } from "@usercue/shared";
 import satori from "satori";
 import { db } from "./db";
 import type { Branding } from "./workspace";
@@ -45,6 +45,7 @@ export interface OgPost {
   title: string;
   body: string;
   status: Status;
+  status_name: string;
   author_name: string;
   board_name: string;
   created_at: number;
@@ -60,7 +61,8 @@ export interface OgEntry {
 }
 
 export const ogPost = db.query<OgPost>(
-  `SELECT p.id, p.title, p.body, p.status, p.author_name, b.name AS board_name, p.created_at
+  `SELECT p.id, p.title, p.body, p.status, p.author_name, b.name AS board_name, p.created_at,
+          COALESCE((SELECT name FROM workflow_statuses WHERE id = p.status), p.status) AS status_name
    FROM posts p JOIN boards b ON b.id = p.board_id WHERE p.id = ?`,
 );
 
@@ -128,7 +130,7 @@ export function postMeta(origin: string, post: OgPost, branding: Branding): Meta
     type: "article",
     favicon: branding.faviconUrl,
     title: `${post.title} · ${branding.name}`,
-    description: excerpt(post.body, `${STATUS_LABELS[post.status]} · ${post.board_name}`),
+    description: excerpt(post.body, `${post.status_name} · ${post.board_name}`),
     url: `${origin}/post/${post.id}`,
     image: `${origin}/api/og/post/${post.id}.png`,
     publishedTime: post.created_at,
@@ -294,7 +296,7 @@ export function renderPostCard(post: OgPost, accent: string, site: string): Prom
       card({
         site,
         accent,
-        chip: STATUS_LABELS[post.status],
+        chip: post.status_name,
         meta: post.board_name,
         title: post.title,
         body: excerpt(post.body, ""),

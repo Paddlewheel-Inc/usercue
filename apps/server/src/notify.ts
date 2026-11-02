@@ -1,15 +1,8 @@
-import { STATUS_LABELS, type Status, stripHtml } from "@usercue/shared";
+import { type Status, stripHtml } from "@usercue/shared";
 import { db } from "./db";
 import { decryptSecret } from "./secret";
+import { findWorkflowStatus, workflowName } from "./workflow";
 import { getWorkspace } from "./workspace";
-
-const COLORS: Record<Status, number> = {
-  open: 0x8a8178,
-  planned: 0x38bdf8,
-  in_progress: 0x8b5cf6,
-  complete: 0x34d399,
-  closed: 0xfb7185,
-};
 
 interface PostInfo {
   id: number;
@@ -149,7 +142,8 @@ async function editMessage(url: string, messageId: string, payload: unknown): Pr
   }
 }
 
-function postEmbed(origin: string, post: PostInfo) {
+async function postEmbed(origin: string, post: PostInfo) {
+  const status = await findWorkflowStatus.get(post.status);
   const excerpt = stripHtml(post.body).slice(0, 300);
   const votes = post.voteCount ?? 0;
   const icon = authorIconUrl(origin, post);
@@ -157,14 +151,14 @@ function postEmbed(origin: string, post: PostInfo) {
     title: post.title,
     url: `${origin}/post/${post.id}`,
     description: excerpt || undefined,
-    color: COLORS[post.status],
+    color: Number.parseInt((status?.color ?? "#a8a29e").slice(1), 16),
     author: {
       name: `Posted by ${post.authorName}`,
       ...(icon ? { icon_url: icon } : {}),
     },
     fields: [
       { name: "📄 Category", value: post.boardName, inline: true },
-      { name: "📊 Status", value: STATUS_LABELS[post.status], inline: true },
+      { name: "📊 Status", value: status?.name ?? post.status, inline: true },
       {
         name: "🔼 Votes",
         value: `${votes} ${votes === 1 ? "vote" : "votes"}`,
@@ -179,7 +173,7 @@ async function syncPostMessage(origin: string, post: PostInfo): Promise<void> {
   const url = await webhookUrl();
   if (!url) return;
 
-  const payload = { embeds: [postEmbed(origin, post)] };
+  const payload = { embeds: [await postEmbed(origin, post)] };
   const existing = (await readMessageId.get(post.id))?.message_id ?? "";
   if (existing && (await editMessage(url, existing, payload))) return;
 
@@ -197,7 +191,7 @@ async function teamsWebhookUrl(): Promise<string | null> {
   }
 }
 
-function teamsCard(origin: string, post: PostInfo, activity: string) {
+async function teamsCard(origin: string, post: PostInfo, activity: string) {
   const excerpt = stripHtml(post.body).slice(0, 300);
   const link = `${origin}/post/${post.id}`;
   const body: Record<string, unknown>[] = [
@@ -216,7 +210,7 @@ function teamsCard(origin: string, post: PostInfo, activity: string) {
     type: "FactSet",
     facts: [
       { title: "Category", value: post.boardName },
-      { title: "Status", value: STATUS_LABELS[post.status] },
+      { title: "Status", value: await workflowName(post.status) },
       {
         title: "Votes",
         value: `${post.voteCount ?? 0} ${(post.voteCount ?? 0) === 1 ? "vote" : "votes"}`,
@@ -249,7 +243,7 @@ async function postTeams(origin: string, post: PostInfo, activity: string): Prom
     await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(teamsCard(origin, post, activity)),
+      body: JSON.stringify(await teamsCard(origin, post, activity)),
       redirect: "error",
       signal: AbortSignal.timeout(8000),
     });
@@ -265,7 +259,7 @@ export async function notifyStatusChange(
   post: PostInfo,
   actorName: string,
 ): Promise<void> {
-  const activity = `${actorName} moved this to ${STATUS_LABELS[post.status]}`;
+  const activity = `${actorName} moved this to ${await workflowName(post.status)}`;
   await Promise.all([syncPostMessage(origin, post), postTeams(origin, post, activity)]);
 }
 

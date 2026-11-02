@@ -1,4 +1,4 @@
-import { LIMITS, STATUS_LABELS, STATUSES, type Status, tagColorHex } from "@usercue/shared";
+import { LIMITS, type Status, tagColorHex } from "@usercue/shared";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { useCommentAnchor } from "../lib/anchor";
 import type { Comment } from "../lib/api";
@@ -17,19 +17,9 @@ import {
   useUpdatePost,
   useVote,
 } from "../lib/queries";
+import { useWorkflow, useWorkflowStatus } from "../lib/workflow";
 import { Editor } from "./Editor";
-import {
-  Check,
-  Heart,
-  More,
-  Plus,
-  StatusClosed,
-  StatusComplete,
-  StatusOpen,
-  StatusPlanned,
-  StatusProgress,
-  Trash,
-} from "./icons";
+import { Check, More, Plus, Trash } from "./icons";
 import { OAuthButtons } from "./OAuthButtons";
 import { RichText } from "./RichText";
 import {
@@ -38,19 +28,11 @@ import {
   ErrorText,
   RoleBadge,
   ShareButton,
-  STATUS_INK,
   StatusBadge,
   TagChip,
   VoteButton,
 } from "./ui";
-
-const STATUS_ICONS = {
-  open: StatusOpen,
-  planned: StatusPlanned,
-  in_progress: StatusProgress,
-  complete: StatusComplete,
-  closed: StatusClosed,
-} as const;
+import { StatusIcon, StatusName } from "./WorkflowIcon";
 
 interface PostDetailProps {
   id: number;
@@ -153,9 +135,6 @@ export function PostDetail({ id, onDeleted }: PostDetailProps) {
   );
 }
 
-const ROAD: Status[] = ["open", "planned", "in_progress", "complete"];
-const CLOSED_ROAD: Status[] = ["open", "planned", "in_progress", "closed"];
-
 type StatusStop = {
   id: number;
   status: Status;
@@ -167,7 +146,13 @@ type StatusStop = {
 type Assignee = { id: number; name: string; avatarUrl: string | null };
 
 function StatusRoad({ current }: { current: Status }) {
-  const stops = current === "closed" ? CLOSED_ROAD : ROAD;
+  const { statuses } = useWorkflow();
+  const category = useWorkflowStatus(current).category;
+  const stops = statuses
+    .filter((item) =>
+      category === "closed" ? item.category !== "complete" : item.category !== "closed",
+    )
+    .map((item) => item.id);
   const found = stops.indexOf(current);
   const currentIndex = found === -1 ? 0 : found;
 
@@ -195,7 +180,7 @@ function StatusRoad({ current }: { current: Status }) {
                 active ? "text-fg" : reached ? "text-muted" : "text-faint"
               }`}
             >
-              {STATUS_LABELS[status]}
+              <StatusName status={status} />
             </p>
           </li>
         );
@@ -215,7 +200,8 @@ function ActivityLog({ history }: { history: StatusStop[] }) {
           <Avatar name={item.actorName} src={item.actorAvatar} size="sm" />
           <p className="min-w-0 pt-0.5 text-[13px] leading-5 text-muted">
             <span className="font-medium text-fg">{item.actorName}</span>
-            {` updated this status to ${STATUS_LABELS[item.status]}`}
+            {" updated this status to "}
+            <StatusName status={item.status} />
           </p>
         </li>
       ))}
@@ -232,18 +218,11 @@ function StopHeart({
   active: boolean;
   reached: boolean;
 }) {
-  const color = STATUS_INK[status];
-  if (active) {
-    return (
-      <span className={`relative flex size-5 items-center justify-center ${color}`}>
-        <Heart className="animate-stop" width={14} height={14} fill="currentColor" stroke="none" />
-      </span>
-    );
-  }
-  if (reached) {
-    return <Heart className={color} width={14} height={14} fill="currentColor" stroke="none" />;
-  }
-  return <Heart className={`${color} opacity-40`} width={14} height={14} />;
+  return (
+    <span className={`${active ? "animate-stop" : ""} ${!reached ? "opacity-40" : ""}`}>
+      <StatusIcon status={status} filled={active || reached} />
+    </span>
+  );
 }
 
 function AssigneeControl({
@@ -358,6 +337,7 @@ function PostActions({
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const { data: boards = [] } = useBoards();
+  const { statuses } = useWorkflow();
 
   useEffect(() => {
     if (!open) return;
@@ -396,8 +376,8 @@ function PostActions({
                   Status
                 </p>
                 <div className="flex flex-col gap-0.5">
-                  {STATUSES.map((item) => {
-                    const Icon = STATUS_ICONS[item];
+                  {statuses.map((entry) => {
+                    const item = entry.id;
                     const selected = item === status;
                     return (
                       <button
@@ -412,8 +392,10 @@ function PostActions({
                           setOpen(false);
                         }}
                       >
-                        <Icon width={14} height={14} className={STATUS_INK[item]} />
-                        <span className="flex-1 text-left">{STATUS_LABELS[item]}</span>
+                        <StatusIcon status={item} />
+                        <span className="flex-1 text-left">
+                          <StatusName status={item} />
+                        </span>
                         {selected && <Check width={12} height={12} className="text-fg" />}
                       </button>
                     );

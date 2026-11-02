@@ -1,4 +1,4 @@
-import { STATUS_LABELS, type Status, tagColorHex } from "@usercue/shared";
+import { type Status, tagColorHex } from "@usercue/shared";
 import {
   createContext,
   type ReactNode,
@@ -12,22 +12,7 @@ import {
 import { createPortal } from "react-dom";
 import { useVoters } from "../lib/queries";
 import { ArrowUp, Check, Copy } from "./icons";
-
-export const STATUS_DOT: Record<Status, string> = {
-  open: "bg-stone-400",
-  planned: "bg-sky-400",
-  in_progress: "bg-violet-400",
-  complete: "bg-emerald-400",
-  closed: "bg-rose-400",
-};
-
-export const STATUS_INK: Record<Status, string> = {
-  open: "text-stone-400",
-  planned: "text-sky-500",
-  in_progress: "text-violet-500",
-  complete: "text-emerald-500",
-  closed: "text-rose-400",
-};
+import { StatusIcon, StatusName } from "./WorkflowIcon";
 
 export function TagChip({
   name,
@@ -51,8 +36,8 @@ export function TagChip({
 export function StatusBadge({ status }: { status: Status }) {
   return (
     <span className="chip text-muted">
-      <span className={`size-1.5 rounded-full ${STATUS_DOT[status]}`} />
-      {STATUS_LABELS[status]}
+      <StatusIcon status={status} />
+      <StatusName status={status} />
     </span>
   );
 }
@@ -178,12 +163,12 @@ export function VoteButton({ count, voted, onClick, compact = false, postId }: V
         className={
           compact
             ? `inline-flex shrink-0 items-center gap-0.5 text-[12px] font-medium tabular-nums transition-colors ${
-                voted ? "text-accent" : "text-muted hover:text-accent"
+                voted ? "text-accent-text" : "text-muted hover:text-accent-text"
               }`
             : `group/vote inline-flex w-10 shrink-0 flex-col items-center justify-center gap-0.5 rounded-xl py-1.5 text-[12px] leading-none font-semibold tabular-nums transition-[transform,background-color,color,box-shadow] duration-150 active:scale-95 ${
                 voted
-                  ? "animate-pop bg-accent-soft text-accent"
-                  : "bg-surface text-muted shadow-[var(--shadow)] hover:text-accent"
+                  ? "animate-pop bg-accent-soft text-accent-text"
+                  : "bg-surface text-muted shadow-[var(--shadow)] hover:text-accent-text"
               }`
         }
       >

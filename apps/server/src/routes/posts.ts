@@ -8,6 +8,7 @@ import { type AppEnv, authenticateApiKey, rateLimit, requirePermission } from ".
 import { notifyComment, notifyNewPost, notifyStatusChange } from "../notify";
 import { publicOrigin } from "../oauth";
 import { hasPermission, parsePermissions } from "../roles";
+import { findWorkflowStatus, listWorkflow } from "../workflow";
 import {
   assignmentMode,
   customerTagMode,
@@ -21,8 +22,9 @@ const numberParam = (min: number, max: number) =>
   v.pipe(v.string(), v.transform(Number), v.integer(), v.minValue(min), v.maxValue(max));
 
 const listQuery = v.object({
+  category: v.optional(v.picklist(STATUSES)),
   board: v.optional(v.string()),
-  status: v.optional(v.picklist(STATUSES)),
+  status: v.optional(v.pipe(v.string(), v.minLength(1), v.maxLength(80))),
   sort: v.optional(v.picklist(SORTS), "top"),
   q: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(100))),
   limit: v.optional(numberParam(1, 100), "50"),
@@ -39,7 +41,7 @@ const createPost = v.object({
 
 const updatePost = v.object({
   board: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(80))),
-  status: v.optional(v.picklist(STATUSES)),
+  status: v.optional(v.pipe(v.string(), v.minLength(1), v.maxLength(80))),
   title: v.optional(text(LIMITS.title)),
   body: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(LIMITS.body))),
   assigneeId: v.optional(v.nullable(v.pipe(v.number(), v.integer(), v.minValue(1)))),
@@ -97,6 +99,7 @@ const listPosts = db.query<PostListRow>(`
   FROM ${POST_FROM}
   WHERE ($board::text IS NULL OR b.slug = $board)
     AND ($status::text IS NULL OR p.status = $status)
+    AND ($category::text IS NULL OR p.status IN (SELECT id FROM workflow_statuses WHERE category = $category))
     AND ($q::text IS NULL OR p.title LIKE $q ESCAPE '\\' OR p.body LIKE $q ESCAPE '\\')
   ORDER BY CASE WHEN $sort::text = 'top' THEN p.vote_count END DESC, p.created_at DESC, p.id DESC
   LIMIT $limit::int OFFSET $offset::int`);
@@ -369,11 +372,15 @@ async function applyUpdate(
 
 export const posts = new Hono<AppEnv>()
   .get("/", vValidator("query", listQuery), async (c) => {
-    const { board, status, sort, q, limit, offset } = c.req.valid("query");
+    const { board, status, category, sort, q, limit, offset } = c.req.valid("query");
+    if (status && !(await findWorkflowStatus.get(status))) {
+      return c.json({ error: "Unknown workflow status" }, 400);
+    }
     const rows = await listPosts.all({
       voter: c.get("visitorId"),
       board: board ?? null,
       status: status ?? null,
+      category: category ?? null,
       q: q ? escapeLike(q) : null,
       sort,
       limit,
@@ -386,7 +393,10 @@ export const posts = new Hono<AppEnv>()
     const rows = await statusCounts.all({
       board: c.req.query("board") ?? null,
     });
-    const counts = Object.fromEntries(STATUSES.map((s) => [s, 0])) as Record<Status, number>;
+    const counts = Object.fromEntries((await listWorkflow.all()).map((s) => [s.id, 0])) as Record<
+      Status,
+      number
+    >;
     for (const row of rows) counts[row.status] = row.count;
     return c.json(counts);
   })
@@ -568,6 +578,9 @@ export const posts = new Hono<AppEnv>()
       const patch = c.req.valid("json");
       if (!(await postExists.get(id))) return c.json({ error: "Not found" }, 404);
 
+      if (patch.status && !(await findWorkflowStatus.get(patch.status))) {
+        return c.json({ error: "Unknown workflow status" }, 400);
+      }
       const mode = await assignmentMode();
       if (patch.assigneeId !== undefined && mode === "off") {
         return c.json(
@@ -618,7 +631,7 @@ export const posts = new Hono<AppEnv>()
           await insertStatusChange.run(id, patch.status, actor?.id ?? null, actor?.name ?? "Team");
           if (
             mode === "auto" &&
-            patch.status === "planned" &&
+            (await findWorkflowStatus.get(patch.status))?.category === "planned" &&
             (patch.assigneeId === undefined || null)
           ) {
             const next = await pickNextAssignee();
