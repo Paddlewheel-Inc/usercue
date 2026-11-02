@@ -690,10 +690,7 @@ export const settings = new Hono<AppEnv>()
       const { name, permissions, iconUrl } = c.req.valid("json");
       const user = c.get("user");
       if (!user || permissions.some((permission) => !user.permissions.includes(permission))) {
-        return c.json(
-          { error: "Roles can only grant permissions assigned to your account." },
-          403,
-        );
+        return c.json({ error: "Roles can only grant permissions assigned to your account." }, 403);
       }
       if (await findRoleByName.get(name)) {
         return c.json({ error: "A role with that name already exists." }, 409);
@@ -759,10 +756,7 @@ export const settings = new Hono<AppEnv>()
       }
       const user = c.get("user");
       if (body.permissions?.some((permission) => !user?.permissions.includes(permission))) {
-        return c.json(
-          { error: "Roles can only grant permissions assigned to your account." },
-          403,
-        );
+        return c.json({ error: "Roles can only grant permissions assigned to your account." }, 403);
       }
 
       const name = body.name?.trim() || role.name;
