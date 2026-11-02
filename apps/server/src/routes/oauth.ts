@@ -107,24 +107,7 @@ function fail(
   return c.redirect(`${dest}?error=${encodeURIComponent(message)}`);
 }
 
-export const oauth = new Hono<AppEnv>()
-  .get("/methods", async (c) => {
-    const origin = publicOrigin(c);
-    const enabled = new Set(
-      (await listProviders.all()).filter((p) => p.enabled === 1).map((p) => p.provider),
-    );
-    return c.json({
-      providers: AUTH_PROVIDERS.filter((id) => enabled.has(id)).map((id) => ({
-        id,
-        label: AUTH_PROVIDER_META[id].label,
-      })),
-      passwordLogin: !(await oauthOnly()),
-      redirects: Object.fromEntries(
-        AUTH_PROVIDERS.map((id) => [id, redirectUrl(origin, id)]),
-      ) as Record<string, string>,
-    });
-  })
-
+export const oauthProviders = new Hono<AppEnv>()
   .get("/providers", requirePermission("manage_settings"), async (c) => {
     const origin = publicOrigin(c);
     const rows = new Map((await listProviders.all()).map((p) => [p.provider, p]));
@@ -186,7 +169,26 @@ export const oauth = new Hono<AppEnv>()
     if (!isProvider(provider)) return c.json({ error: "Unknown provider" }, 400);
     await deleteProvider.run(provider);
     return c.json({ ok: true });
+  });
+
+export const oauth = new Hono<AppEnv>()
+  .get("/methods", async (c) => {
+    const origin = publicOrigin(c);
+    const enabled = new Set(
+      (await listProviders.all()).filter((p) => p.enabled === 1).map((p) => p.provider),
+    );
+    return c.json({
+      providers: AUTH_PROVIDERS.filter((id) => enabled.has(id)).map((id) => ({
+        id,
+        label: AUTH_PROVIDER_META[id].label,
+      })),
+      passwordLogin: !(await oauthOnly()),
+      redirects: Object.fromEntries(
+        AUTH_PROVIDERS.map((id) => [id, redirectUrl(origin, id)]),
+      ) as Record<string, string>,
+    });
   })
+  .route("/", oauthProviders)
 
   .get("/links", requireUser, async (c) => {
     const rows = await listLinks.all(c.get("user")!.id);

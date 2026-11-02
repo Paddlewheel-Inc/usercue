@@ -4,6 +4,8 @@ import {
   ASSIGNMENT_MODES,
   type AssignmentMode,
   isHexColor,
+  PERMISSION_META,
+  PERMISSIONS,
   type Permission,
   SITE_DEFAULTS,
   SITE_LIMITS,
@@ -13,14 +15,16 @@ import {
 } from "@usercue/shared";
 import { type FormEvent, type ReactNode, useEffect, useRef, useState } from "react";
 import { Link, Redirect, useParams } from "wouter";
-import { ArrowUpRight, Check, ChevronDown, More, Plus, Trash } from "../components/icons";
+import { ArrowUpRight, Check, ChevronDown, Copy, More, Plus, Trash } from "../components/icons";
 import { ProviderIcon } from "../components/OAuthButtons";
 import { Avatar, Checkbox, CopyField, ErrorText, useToast } from "../components/ui";
-import { uploadImage } from "../lib/api";
-import { timeAgo } from "../lib/format";
+import { type ApiKey, uploadImage } from "../lib/api";
+import { dateTimeLabel, longDate, timeAgo } from "../lib/format";
 import {
   type AuthProvider,
   can,
+  useApiKeys,
+  useCreateApiKey,
   useCreateRole,
   useCreateTag,
   useDeleteProvider,
@@ -32,6 +36,7 @@ import {
   useProviders,
   useRemoveStaff,
   useReorderRoles,
+  useRevokeApiKey,
   useRevokeInvite,
   useRoles,
   useSaveBranding,
@@ -39,6 +44,7 @@ import {
   useSaveSettings,
   useSettings,
   useTags,
+  useUpdateApiKeyPermissions,
   useUpdateRole,
   useUpdateTag,
   useUpdateWorkspaceUser,
@@ -53,6 +59,7 @@ const TABS = [
   { id: "auth", href: "/admin/settings/auth", label: "Authentication" },
   { id: "users", href: "/admin/settings/users", label: "Users" },
   { id: "roles", href: "/admin/settings/roles", label: "Roles" },
+  { id: "api-keys", href: "/admin/settings/api-keys", label: "API keys" },
 ] as const;
 
 type SettingsTab = (typeof TABS)[number]["id"];
@@ -70,6 +77,7 @@ export function Settings() {
     if (tab.id === "tags") return can(me, "manage_posts") || can(me, "manage_settings");
     if (tab.id === "auth") return can(me, "manage_settings");
     if (tab.id === "users") return can(me, "manage_users");
+    if (tab.id === "api-keys") return can(me, "manage_settings");
     return can(me, "manage_roles");
   });
 
@@ -119,6 +127,8 @@ export function Settings() {
             <UsersSettings />
           ) : tab === "roles" ? (
             <RolesSettings />
+          ) : tab === "api-keys" ? (
+            <ApiKeysSettings />
           ) : (
             <GeneralSettings />
           )}
@@ -132,14 +142,350 @@ function TabLink({ href, active, children }: { href: string; active: boolean; ch
   return (
     <Link
       href={href}
-      className={`inline-flex h-7 items-center rounded-full px-3 text-[13px] transition-colors ${
+      className={`inline-flex h-7 items-center rounded-full px-3 text-[13px] font-medium transition-colors ${
         active
-          ? "bg-surface font-medium text-fg shadow-(--shadow)"
+          ? "bg-surface text-fg shadow-(--shadow)"
           : "text-muted hover:bg-hover/70 hover:text-fg"
       }`}
     >
       {children}
     </Link>
+  );
+}
+
+function ApiKeyPermissionPicker({
+  selected,
+  accountPermissions,
+  onChange,
+  disabled = false,
+}: {
+  selected: Permission[];
+  accountPermissions: Permission[];
+  onChange: (permissions: Permission[]) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <div className="flex flex-col gap-2.5">
+      {PERMISSIONS.map((permission) => {
+        const allowed = accountPermissions.includes(permission);
+        return (
+          <Checkbox
+            key={permission}
+            checked={selected.includes(permission)}
+            disabled={!allowed || disabled}
+            onChange={(checked) =>
+              onChange(
+                checked
+                  ? [...selected, permission]
+                  : selected.filter((item) => item !== permission),
+              )
+            }
+          >
+            <span className="flex flex-col">
+              <span className="flex flex-wrap items-center gap-x-1.5">
+                <span>{PERMISSION_META[permission].label}</span>
+                {!allowed && <span className="text-[11px] text-faint">Not assigned</span>}
+              </span>
+              <span className="text-[12px] text-muted">
+                {PERMISSION_META[permission].description}
+              </span>
+            </span>
+          </Checkbox>
+        );
+      })}
+    </div>
+  );
+}
+
+function ApiKeysSettings() {
+  const { data: keys, isLoading, error } = useApiKeys();
+  const create = useCreateApiKey();
+  const updatePermissions = useUpdateApiKeyPermissions();
+  const revoke = useRevokeApiKey();
+  const toast = useToast();
+  const { data: me } = useMe();
+  const [name, setName] = useState("");
+  const [selectedPermissions, setSelectedPermissions] = useState<Permission[]>([]);
+  const [creationStep, setCreationStep] = useState<"name" | "permissions">("name");
+  const [editingKeyId, setEditingKeyId] = useState<number | null>(null);
+  const [editingPermissions, setEditingPermissions] = useState<Permission[]>([]);
+  const [createdKey, setCreatedKey] = useState<{ name: string; value: string } | null>(null);
+  const accountPermissions = me?.user?.permissions ?? [];
+
+  function continueToPermissions(e: FormEvent) {
+    e.preventDefault();
+    if (name.trim()) setCreationStep("permissions");
+  }
+
+  function submit(e: FormEvent) {
+    e.preventDefault();
+    create.mutate(
+      { name: name.trim(), permissions: selectedPermissions },
+      {
+        onSuccess: (result) => {
+          setName("");
+          setSelectedPermissions([]);
+          setCreationStep("name");
+          setCreatedKey({ name: result.name, value: result.key });
+          create.reset();
+        },
+        onError: (cause) => toast({ message: cause.message, tone: "error" }),
+      },
+    );
+  }
+
+  function startEditingPermissions(key: ApiKey) {
+    setEditingKeyId(key.id);
+    setEditingPermissions(
+      key.permissions.filter((permission) => accountPermissions.includes(permission)),
+    );
+  }
+
+  function savePermissions(keyId: number) {
+    updatePermissions.mutate(
+      { id: keyId, permissions: editingPermissions },
+      {
+        onSuccess: () => {
+          setEditingKeyId(null);
+          toast({ message: "API key permissions updated." });
+        },
+        onError: (cause) => toast({ message: cause.message, tone: "error" }),
+      },
+    );
+  }
+
+  async function copyKey(value: string) {
+    try {
+      await navigator.clipboard.writeText(value);
+      toast({ message: "API key copied." });
+    } catch {
+      toast({ message: "Could not copy the API key. Select and copy it manually.", tone: "error" });
+    }
+  }
+
+  function revokeKey(id: number, keyName: string) {
+    if (!confirm(`Revoke “${keyName}”? Requests using this key will stop working.`)) return;
+    revoke.mutate(id, {
+      onSuccess: () => toast({ message: "API key revoked." }),
+      onError: (cause) => toast({ message: cause.message, tone: "error" }),
+    });
+  }
+
+  return (
+    <div className="flex flex-col gap-7">
+      <section className="flex flex-col gap-3">
+        <div>
+          <h2 className="text-[13px] font-medium">API keys</h2>
+          <p className="mt-1 text-[12px] text-muted">
+            Create keys to authenticate API requests to your workspace.
+          </p>
+        </div>
+        <form
+          onSubmit={creationStep === "name" ? continueToPermissions : submit}
+          className="flex flex-col gap-4"
+        >
+          <div className="flex items-center gap-2 text-[11px] text-muted">
+            <span className={creationStep === "name" ? "font-medium text-fg" : ""}>1. Name</span>
+            <span aria-hidden="true">/</span>
+            <span className={creationStep === "permissions" ? "font-medium text-fg" : ""}>
+              2. Permissions
+            </span>
+          </div>
+          {creationStep === "name" ? (
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <input
+                className="input"
+                aria-label="API key name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                maxLength={60}
+                placeholder="Website integration"
+                autoComplete="off"
+              />
+              <button type="submit" className="btn-primary h-9 shrink-0" disabled={!name.trim()}>
+                Continue
+              </button>
+            </div>
+          ) : (
+            <>
+              <div className="flex flex-col gap-3 rounded-2xl bg-hover/60 p-3.5">
+                <div>
+                  <h3 className="text-[13px] font-medium">Permissions for {name.trim()}</h3>
+                  <p className="mt-1 text-[12px] text-muted">
+                    Public API actions are available by default. Select any staff permissions this
+                    key needs; permissions you don&apos;t have are disabled.
+                  </p>
+                </div>
+                <ApiKeyPermissionPicker
+                  selected={selectedPermissions}
+                  accountPermissions={accountPermissions}
+                  onChange={setSelectedPermissions}
+                  disabled={create.isPending}
+                />
+              </div>
+              <div className="flex justify-between gap-2">
+                <button
+                  type="button"
+                  className="btn-quiet h-9 px-3"
+                  onClick={() => setCreationStep("name")}
+                  disabled={create.isPending}
+                >
+                  Back
+                </button>
+                <button type="submit" className="btn-primary h-9" disabled={create.isPending}>
+                  <Plus />
+                  {create.isPending ? "Creating…" : "Create key"}
+                </button>
+              </div>
+            </>
+          )}
+        </form>
+        <ErrorText error={create.error} />
+      </section>
+
+      {createdKey && (
+        <section className="flex flex-col gap-3 rounded-2xl bg-accent-soft p-4">
+          <div className="flex items-start gap-2.5">
+            <div className="min-w-0 flex-1">
+              <h2 className="text-[13px] font-medium">{createdKey.name} is ready</h2>
+              <p className="mt-1 text-[12px] text-muted">
+                Copy it now. For your security, the full key will not be shown again.
+              </p>
+            </div>
+            <button
+              type="button"
+              className="btn-quiet h-7 px-2.5"
+              onClick={() => setCreatedKey(null)}
+            >
+              Done
+            </button>
+          </div>
+          <div className="flex min-w-0 items-center gap-2 rounded-xl bg-surface px-3 py-2">
+            <code className="min-w-0 flex-1 overflow-x-auto text-[12px]">{createdKey.value}</code>
+            <button
+              type="button"
+              className="btn-ghost h-7 px-2.5"
+              onClick={() => void copyKey(createdKey.value)}
+            >
+              <Copy />
+              Copy
+            </button>
+          </div>
+        </section>
+      )}
+
+      <section className="flex flex-col gap-3">
+        <div>
+          <h2 className="text-[13px] font-medium">Active keys</h2>
+          <p className="mt-1 text-[12px] text-muted">
+            Revoke a key at any time to stop integrations from using it.
+          </p>
+        </div>
+        {isLoading ? (
+          <p className="py-4 text-[12px] text-muted">Loading API keys…</p>
+        ) : error ? (
+          <ErrorText error={error} />
+        ) : keys?.length ? (
+          <ul className="flex flex-col divide-y divide-line rounded-2xl bg-surface px-3 shadow-[var(--shadow)]">
+            {keys.map((key) => (
+              <li key={key.id} className="flex min-w-0 flex-col gap-3 py-3">
+                <div className="flex min-w-0 items-center gap-3">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[13px] font-medium">{key.name}</p>
+                    <p className="mt-1 flex flex-wrap gap-1">
+                      {key.permissions.length > 0 ? (
+                        key.permissions.map((permission) => (
+                          <span key={permission} className="chip h-5 px-2 text-[10px]">
+                            {PERMISSION_META[permission].label}
+                          </span>
+                        ))
+                      ) : (
+                        <span className="text-[11px] text-faint">No additional permissions</span>
+                      )}
+                    </p>
+                    <p className="mt-1 flex items-center gap-1.5 text-[11px] text-muted">
+                      <Avatar name={key.createdBy.name} src={key.createdBy.avatarUrl} size="xs" />
+                      <span>Created by</span>
+                      <span className="font-medium text-fg">{key.createdBy.name}</span>
+                    </p>
+                    <p className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-[11px] text-faint">
+                      <code>{key.prefix}…</code>
+                      <span aria-hidden="true">·</span>
+                      <span title={longDate(key.createdAt)}>Created {timeAgo(key.createdAt)}</span>
+                      <span aria-hidden="true">·</span>
+                      <span title={longDate(key.lastModifiedAt)}>
+                        Last modified {timeAgo(key.lastModifiedAt)}
+                      </span>
+                      <span aria-hidden="true">·</span>
+                      <span>
+                        {key.lastUsedAt === null
+                          ? "Never used"
+                          : `Last used ${dateTimeLabel(key.lastUsedAt)}`}
+                      </span>
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-1">
+                    <button
+                      type="button"
+                      className="btn-quiet h-7 px-2.5"
+                      aria-expanded={editingKeyId === key.id}
+                      onClick={() =>
+                        editingKeyId === key.id
+                          ? setEditingKeyId(null)
+                          : startEditingPermissions(key)
+                      }
+                    >
+                      {editingKeyId === key.id ? "Cancel" : "Edit"}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-quiet h-7 px-2.5 text-rose-500 hover:bg-rose-500/10 hover:text-rose-500"
+                      disabled={revoke.isPending}
+                      onClick={() => revokeKey(key.id, key.name)}
+                    >
+                      <Trash />
+                      Revoke
+                    </button>
+                  </div>
+                </div>
+                {editingKeyId === key.id && (
+                  <div className="flex flex-col gap-3 rounded-2xl bg-hover/60 p-3.5">
+                    <div>
+                      <h3 className="text-[13px] font-medium">Edit permissions</h3>
+                      <p className="mt-1 text-[12px] text-muted">
+                        Only permissions assigned to your account can be granted. Unavailable
+                        permissions won&apos;t be retained when saved.
+                      </p>
+                    </div>
+                    <ApiKeyPermissionPicker
+                      selected={editingPermissions}
+                      accountPermissions={accountPermissions}
+                      onChange={setEditingPermissions}
+                      disabled={updatePermissions.isPending}
+                    />
+                    <div className="flex justify-end">
+                      <button
+                        type="button"
+                        className="btn-primary h-8 px-3"
+                        disabled={updatePermissions.isPending}
+                        onClick={() => savePermissions(key.id)}
+                      >
+                        {updatePermissions.isPending ? "Saving…" : "Save permissions"}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="rounded-2xl bg-hover/60 px-4 py-8 text-center text-[12px] text-muted">
+            No API keys yet, create one above.
+          </p>
+        )}
+        <ErrorText error={revoke.error} />
+      </section>
+    </div>
   );
 }
 
@@ -1295,7 +1641,7 @@ function UsersSettings() {
                     currentName={current?.name ?? person.roleName}
                     currentIcon={current?.iconUrl}
                     roles={roles?.roles ?? []}
-                    disabled={self || update.isPending}
+                    disabled={self || update.isPending || !can(me, "manage_roles")}
                     onSelect={(roleId) => update.mutate({ id: person.id, roleId })}
                   />
                   {!self && (

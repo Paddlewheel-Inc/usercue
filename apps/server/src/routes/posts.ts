@@ -4,7 +4,7 @@ import { Hono } from "hono";
 import * as v from "valibot";
 import { type CommentRow, db, type PostRow } from "../db";
 import { notifyMentions } from "../mentions";
-import { type AppEnv, rateLimit, requirePermission } from "../middleware";
+import { type AppEnv, authenticateApiKey, rateLimit, requirePermission } from "../middleware";
 import { notifyComment, notifyNewPost, notifyStatusChange } from "../notify";
 import { publicOrigin } from "../oauth";
 import { hasPermission, parsePermissions } from "../roles";
@@ -391,7 +391,7 @@ export const posts = new Hono<AppEnv>()
     return c.json(counts);
   })
 
-  .post("/", rateLimit(10, 60), vValidator("json", createPost), async (c) => {
+  .post("/", authenticateApiKey, rateLimit(10, 60), vValidator("json", createPost), async (c) => {
     const { board, title, body, name, tagIds: rawTagIds } = c.req.valid("json");
     const team = c.get("user");
     const identity = c.get("identity");
@@ -565,9 +565,9 @@ export const posts = new Hono<AppEnv>()
     vValidator("json", updatePost),
     async (c) => {
       const { id } = c.req.valid("param");
+      const patch = c.req.valid("json");
       if (!(await postExists.get(id))) return c.json({ error: "Not found" }, 404);
 
-      const patch = c.req.valid("json");
       const mode = await assignmentMode();
       if (patch.assigneeId !== undefined && mode === "off") {
         return c.json(
@@ -594,41 +594,52 @@ export const posts = new Hono<AppEnv>()
         boardId = target.id;
       }
 
-      const previous = await findPostStatus.get(id);
-      if (boardId !== null) await setBoard.run(boardId, id);
-      await applyUpdate(id, {
-        status: patch.status,
-        title: patch.title,
-        body: patch.body === undefined ? undefined : sanitizeHtml(patch.body),
-      });
-      if (patch.status && previous && patch.status !== previous.status) {
-        const actor = c.get("user");
-        await insertStatusChange.run(id, patch.status, actor?.id ?? null, actor?.name ?? "Team");
-        if (
-          mode === "auto" &&
-          patch.status === "planned" &&
-          (patch.assigneeId === undefined || null)
-        ) {
-          const next = await pickNextAssignee();
-          if (next) await setAssignee.run(next.id, id);
-        }
-      }
-      if (mode !== "off" && patch.assigneeId !== undefined) {
-        await setAssignee.run(patch.assigneeId, id);
-      }
-      if (patch.tagIds !== undefined) {
-        const tagIds = [...new Set(patch.tagIds)];
+      const tagIds = patch.tagIds === undefined ? undefined : [...new Set(patch.tagIds)];
+      if (tagIds !== undefined) {
         if (tagIds.length > 8) return c.json({ error: "A suggestion can have up to 8 tags." }, 400);
         const known = new Set((await listTagIds.all()).map((tag) => tag.id));
         if (tagIds.some((tagId) => !known.has(tagId))) {
           return c.json({ error: "Unknown tag." }, 400);
         }
-        await replaceTags(id, tagIds);
       }
+
+      const actor = c.get("user");
+      const previous = await db.transaction(async () => {
+        const status = await findPostStatus.get(id);
+        if (!status) return undefined;
+
+        if (boardId !== null) await setBoard.run(boardId, id);
+        await applyUpdate(id, {
+          status: patch.status,
+          title: patch.title,
+          body: patch.body === undefined ? undefined : sanitizeHtml(patch.body),
+        });
+        if (patch.status && patch.status !== status.status) {
+          await insertStatusChange.run(id, patch.status, actor?.id ?? null, actor?.name ?? "Team");
+          if (
+            mode === "auto" &&
+            patch.status === "planned" &&
+            (patch.assigneeId === undefined || null)
+          ) {
+            const next = await pickNextAssignee();
+            if (next) await setAssignee.run(next.id, id);
+          }
+        }
+        if (mode !== "off" && patch.assigneeId !== undefined) {
+          await setAssignee.run(patch.assigneeId, id);
+        }
+        if (tagIds !== undefined) {
+          await clearPostTags.run(id);
+          for (const tagId of tagIds) await insertPostTag.run(id, tagId);
+        }
+        return status;
+      });
+      if (!previous) return c.json({ error: "Not found" }, 404);
+
       const post = await getPost.get({ id, voter: c.get("visitorId") });
       if (!post) return c.json({ error: "Not found" }, 404);
-      if (patch.status && previous && patch.status !== previous.status) {
-        void notifyStatusChange(publicOrigin(c), serialize(post), c.get("user")?.name ?? "Team");
+      if (patch.status && patch.status !== previous.status) {
+        void notifyStatusChange(publicOrigin(c), serialize(post), actor?.name ?? "Team");
       }
       return c.json(serialize(post));
     },

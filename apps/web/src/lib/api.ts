@@ -1,4 +1,5 @@
 import type { AppType } from "@usercue/server";
+import type { Permission } from "@usercue/shared";
 import type { InferResponseType } from "hono/client";
 import { hc } from "hono/client";
 
@@ -14,6 +15,9 @@ export type ChangelogComment = ChangelogDetail["comments"][number];
 export type Board = InferResponseType<typeof api.boards.$get, 200>[number];
 export type AuthProvider = InferResponseType<typeof api.auth.providers.$get, 200>[number];
 export type WorkspaceSettings = InferResponseType<typeof api.settings.$get, 200>;
+type ApiKeysRoute = (typeof api.settings)["api-keys"];
+export type ApiKey = InferResponseType<ApiKeysRoute["$get"], 200>[number];
+export type CreatedApiKey = InferResponseType<ApiKeysRoute["$post"], 201>;
 
 export class ApiError extends Error {
   constructor(
@@ -23,6 +27,21 @@ export class ApiError extends Error {
     super(message);
   }
 }
+
+export const apiKeys = {
+  list: () => unwrap(api.settings["api-keys"].$get()),
+  create: (body: { name: string; permissions: Permission[] }) =>
+    unwrap(api.settings["api-keys"].$post({ json: body })),
+  updatePermissions: (id: number, permissions: Permission[]) =>
+    unwrap(
+      api.settings["api-keys"][":id"].$patch({
+        param: { id: String(id) },
+        json: { permissions },
+      }),
+    ),
+  revoke: (id: number) =>
+    unwrap(api.settings["api-keys"][":id"].$delete({ param: { id: String(id) } })),
+};
 
 type JsonResponse = { ok: boolean; status: number; json(): Promise<unknown> };
 type Success<R extends JsonResponse> = Exclude<Awaited<ReturnType<R["json"]>>, { error: string }>;

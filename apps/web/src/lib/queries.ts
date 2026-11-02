@@ -9,7 +9,7 @@ import type {
   TagColor,
 } from "@usercue/shared";
 import { applyAccent } from "./accent";
-import { type AuthProvider, api, type Post, type PostDetail, unwrap } from "./api";
+import { type AuthProvider, api, apiKeys, type Post, type PostDetail, unwrap } from "./api";
 
 export type { AuthProvider };
 
@@ -27,6 +27,40 @@ export const useMe = () =>
     staleTime: 60_000,
     retry: 2,
   });
+
+export const useApiKeys = () =>
+  useQuery({
+    queryKey: ["api-keys"],
+    queryFn: apiKeys.list,
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: true,
+  });
+
+export function useCreateApiKey() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { name: string; permissions: Permission[] }) => apiKeys.create(body),
+    gcTime: 0,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["api-keys"] }),
+  });
+}
+
+export function useUpdateApiKeyPermissions() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, permissions }: { id: number; permissions: Permission[] }) =>
+      apiKeys.updatePermissions(id, permissions),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["api-keys"] }),
+  });
+}
+
+export function useRevokeApiKey() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: apiKeys.revoke,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["api-keys"] }),
+  });
+}
 
 export function can(
   me: { user: { permissions: Permission[] } | null } | undefined,

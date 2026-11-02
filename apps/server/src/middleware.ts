@@ -5,6 +5,7 @@ import { createMiddleware } from "hono/factory";
 import { db } from "./db";
 import { env } from "./env";
 import { hasPermission, parsePermissions } from "./roles";
+import { hashSecret } from "./secret";
 
 export interface SessionUser {
   id: number;
@@ -30,6 +31,7 @@ export type AppEnv = {
     visitorId: string;
     user: SessionUser | null;
     identity: VisitorIdentity | null;
+    apiKeyId: number | null;
   };
 };
 
@@ -78,6 +80,25 @@ const findIdentity = db.query<VisitorIdentity, [string]>(
 );
 const deleteIdentity = db.query("DELETE FROM identities WHERE visitor_id = ?");
 
+interface ApiKeySessionRow extends SessionRow {
+  api_key_id: number;
+  api_key_permissions: string;
+}
+
+const findApiKeySession = db.query<ApiKeySessionRow>(
+  `SELECT k.id AS api_key_id, u.id, u.email, u.name, u.avatar_url, u.role_id, u.suspended,
+          CASE WHEN u.password_hash <> '' THEN 1 ELSE 0 END AS has_password,
+          r.permissions, r.name AS role_name, r.icon_url AS role_icon,
+          k.permissions AS api_key_permissions
+   FROM api_keys k
+   JOIN users u ON u.id = k.user_id
+   LEFT JOIN roles r ON r.id = u.role_id
+   WHERE k.key_hash = ?`,
+);
+const markApiKeyUsed = db.query(
+  "UPDATE api_keys SET last_used_at = EXTRACT(EPOCH FROM NOW())::BIGINT WHERE id = ?",
+);
+
 export function toPublicUser(user: SessionUser) {
   return {
     id: user.id,
@@ -122,6 +143,7 @@ export const identify = createMiddleware<AppEnv>(async (c, next) => {
   const sid = getCookie(c, "sid");
   const row = sid ? await findSession.get(sid, Math.floor(Date.now() / 1000)) : undefined;
   c.set("user", row ? toSessionUser(row) : null);
+  c.set("apiKeyId", null);
 
   const identity = (await findIdentity.get(visitorId)) ?? null;
   if (!row && identity) {
@@ -133,6 +155,46 @@ export const identify = createMiddleware<AppEnv>(async (c, next) => {
 
   await next();
 });
+
+function apiKeyMiddleware(required: boolean): MiddlewareHandler<AppEnv> {
+  return createMiddleware<AppEnv>(async (c, next) => {
+    if (c.get("apiKeyId") !== null) return next();
+
+    const authorization = c.req.header("Authorization");
+    if (!authorization) {
+      if (required) return c.json({ error: "API key required" }, 401);
+      return next();
+    }
+
+    const match = /^Bearer\s+(uc_[A-Za-z0-9_-]+)$/i.exec(authorization);
+    const token = match?.[1];
+    if (!token) return c.json({ error: "Invalid API key" }, 401);
+
+    const row = await findApiKeySession.get(hashSecret(token));
+    if (!row) return c.json({ error: "Invalid API key" }, 401);
+
+    const owner = toSessionUser(row);
+    const permissions = parsePermissions(row.api_key_permissions).filter((permission) =>
+      owner.permissions.includes(permission),
+    );
+    const user: SessionUser = {
+      ...owner,
+      permissions,
+      staff: hasPermission(permissions, "dashboard"),
+    };
+    if (user.suspended) return c.json({ error: "Your account has been suspended." }, 403);
+
+    c.set("user", user);
+    c.set("identity", null);
+    c.set("visitorId", `api-key:${row.api_key_id}`);
+    c.set("apiKeyId", row.api_key_id);
+    await markApiKeyUsed.run(row.api_key_id);
+    await next();
+  });
+}
+
+export const authenticateApiKey = apiKeyMiddleware(false);
+export const requireApiKey = apiKeyMiddleware(true);
 
 export const requireUser = createMiddleware<AppEnv>(async (c, next) => {
   if (!c.get("user")) return c.json({ error: "Unauthorized" }, 401);
@@ -158,7 +220,7 @@ export function rateLimit(limit: number, windowSeconds: number): MiddlewareHandl
 
   return async (c, next) => {
     const now = Date.now();
-    const key = `${c.get("visitorId")}:${c.req.path}`;
+    const key = `${c.get("visitorId")}:${c.req.method}:${c.req.routePath}`;
     const entry = hits.get(key);
 
     if (!entry || entry.resetAt <= now) {

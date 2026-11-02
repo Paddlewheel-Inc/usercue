@@ -3,6 +3,13 @@ import { stripHtml } from "@usercue/shared";
 const rtf = new Intl.RelativeTimeFormat("en", { numeric: "auto", style: "short" });
 const short = new Intl.DateTimeFormat("en", { month: "short", day: "numeric" });
 const long = new Intl.DateTimeFormat("en", { month: "long", day: "numeric", year: "numeric" });
+const dateTime = new Intl.DateTimeFormat("en", {
+  month: "short",
+  day: "numeric",
+  year: "numeric",
+  hour: "numeric",
+  minute: "2-digit",
+});
 
 const UNITS: [Intl.RelativeTimeFormatUnit, number][] = [
   ["year", 31_536_000],
@@ -27,6 +34,10 @@ export function shortDate(unixSeconds: number): string {
 
 export function longDate(unixSeconds: number): string {
   return long.format(unixSeconds * 1000);
+}
+
+export function dateTimeLabel(unixSeconds: number): string {
+  return dateTime.format(unixSeconds * 1000);
 }
 
 export function excerpt(text: string, max = 96): string {

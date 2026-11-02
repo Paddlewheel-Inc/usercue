@@ -53,6 +53,8 @@ Copy `.env.example` if you need to point at another database, turn on secure coo
 
 **Workspace.** Tags, roles, and assignment live with the team. Automatic assignment hands the next planned suggestion to the next person in line.
 
+**API keys.** Staff can create and revoke integration keys in Settings.
+
 **Sign-in.** GitHub, Discord, Google, Roblox, and Microsoft. Turn on the ones you actually use.
 
 **Out the door.** New suggestions, status changes, and comments can post to a Discord channel or a Teams webhook.

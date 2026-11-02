@@ -3,6 +3,7 @@ import {
   ACCENT_IDS,
   ASSIGNMENT_MODES,
   isHexColor,
+  LIMITS,
   PERMISSION_META,
   PERMISSIONS,
   type Permission,
@@ -20,11 +21,13 @@ import {
   countOwners,
   countWithPermission,
   encodePermissions,
+  hasPermission,
   isOwnerRole,
   memberRoleId,
   parsePermissions,
   staffRoleId,
 } from "../roles";
+import { hashSecret } from "../secret";
 import { smtpConfigured } from "../smtp";
 import {
   getWorkspace,
@@ -39,6 +42,57 @@ const countEnabledProviders = db.query<{ n: number }>(
   "SELECT COUNT(*)::int AS n FROM oauth_providers WHERE enabled = 1",
 );
 const countTags = db.query<{ n: number }>("SELECT COUNT(*)::int AS n FROM tags");
+
+interface ApiKeyRow {
+  id: number;
+  name: string;
+  prefix: string;
+  permissions: string;
+  created_at: number;
+  last_modified_at: number;
+  last_used_at: number | null;
+}
+
+interface ApiKeyListRow extends ApiKeyRow {
+  created_by_name: string;
+  created_by_avatar: string | null;
+}
+
+const listApiKeys = db.query<ApiKeyListRow>(
+  `SELECT k.id, k.name, k.prefix, k.permissions, k.created_at, k.last_modified_at, k.last_used_at,
+          u.name AS created_by_name, u.avatar_url AS created_by_avatar
+   FROM api_keys k
+   JOIN users u ON u.id = k.user_id
+   WHERE k.user_id = ?
+   ORDER BY k.created_at DESC, k.id DESC`,
+);
+const insertApiKey = db.query<ApiKeyRow>(
+  `INSERT INTO api_keys (user_id, name, key_hash, prefix, permissions)
+   VALUES (?, ?, ?, ?, ?)
+   RETURNING id, name, prefix, permissions, created_at, last_modified_at, last_used_at`,
+);
+const updateApiKeyPermissions = db.query<ApiKeyRow>(
+  `UPDATE api_keys
+   SET permissions = ?, last_modified_at = EXTRACT(EPOCH FROM NOW())::BIGINT
+   WHERE id = ? AND user_id = ?
+   RETURNING id, name, prefix, permissions, created_at, last_modified_at, last_used_at`,
+);
+const deleteApiKey = db.query<{ id: number }>(
+  "DELETE FROM api_keys WHERE id = ? AND user_id = ? RETURNING id",
+);
+
+function serializeApiKey(row: ApiKeyRow, createdBy: { name: string; avatarUrl: string | null }) {
+  return {
+    id: row.id,
+    name: row.name,
+    prefix: row.prefix,
+    permissions: parsePermissions(row.permissions),
+    createdAt: row.created_at,
+    lastModifiedAt: row.last_modified_at,
+    lastUsedAt: row.last_used_at,
+    createdBy,
+  };
+}
 
 interface StaffRow {
   id: number;
@@ -194,7 +248,7 @@ function serializeRole(row: RoleRow, userCount = 0) {
   };
 }
 
-async function snapshot(origin: string) {
+async function snapshot(origin: string, includeStaff: boolean) {
   const workspace = await getWorkspace();
   const creds = await resendCredentials();
   const now = Math.floor(Date.now() / 1000);
@@ -243,15 +297,19 @@ async function snapshot(origin: string) {
     oauthOnly: workspace.oauth_only === 1,
     customerTags: workspace.customer_tags === 1,
     customerTagsRequired: workspace.customer_tags === 1 && workspace.customer_tags_required === 1,
-    staff: (await listPeople.all()).filter(isStaffRow).map((row) => ({
-      id: row.id,
-      email: row.email,
-      name: row.name,
-      avatarUrl: row.avatar_url || null,
-      createdAt: row.created_at,
-      roleName: row.role_name,
-    })),
-    invites: (await listInvites.all(now)).map((row) => serializeInvite(origin, row)),
+    staff: includeStaff
+      ? (await listPeople.all()).filter(isStaffRow).map((row) => ({
+          id: row.id,
+          email: row.email,
+          name: row.name,
+          avatarUrl: row.avatar_url || null,
+          createdAt: row.created_at,
+          roleName: row.role_name,
+        }))
+      : [],
+    invites: includeStaff
+      ? (await listInvites.all(now)).map((row) => serializeInvite(origin, row))
+      : [],
   };
 }
 
@@ -289,7 +347,129 @@ const uploadUrl = v.pipe(
 );
 
 export const settings = new Hono<AppEnv>()
-  .get("/", requireTeam, async (c) => c.json(await snapshot(publicOrigin(c))))
+  .get("/", requireTeam, async (c) => {
+    const user = c.get("user");
+    return c.json(
+      await snapshot(
+        publicOrigin(c),
+        Boolean(user && hasPermission(user.permissions, "manage_staff")),
+      ),
+    );
+  })
+
+  .get("/api-keys", requirePermission("manage_settings"), async (c) => {
+    const user = c.get("user");
+    if (!user) return c.json({ error: "Unauthorized" }, 401);
+    const rows = await listApiKeys.all(user.id);
+    return c.json(
+      rows.map((row) =>
+        serializeApiKey(row, {
+          name: row.created_by_name,
+          avatarUrl: row.created_by_avatar,
+        }),
+      ),
+    );
+  })
+
+  .post(
+    "/api-keys",
+    requirePermission("manage_settings"),
+    vValidator(
+      "json",
+      v.object({
+        name: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(LIMITS.name)),
+        permissions: v.optional(v.array(v.picklist(PERMISSIONS)), []),
+      }),
+    ),
+    async (c) => {
+      const user = c.get("user");
+      if (!user) return c.json({ error: "Unauthorized" }, 401);
+      const { name, permissions: requestedPermissions } = c.req.valid("json");
+      const permissions = [...new Set(requestedPermissions)];
+      if (permissions.some((permission) => !user.permissions.includes(permission))) {
+        return c.json(
+          { error: "API keys can only use permissions assigned to your account." },
+          403,
+        );
+      }
+      const key = `uc_${randomToken(32)}`;
+      const row = await insertApiKey.get(
+        user.id,
+        name,
+        hashSecret(key),
+        key.slice(0, 12),
+        JSON.stringify(permissions),
+      );
+      if (!row) throw new Error("API key insert did not return a row");
+      return c.json(
+        {
+          ...serializeApiKey(row, { name: user.name, avatarUrl: user.avatarUrl }),
+          key,
+        },
+        201,
+      );
+    },
+  )
+
+  .patch(
+    "/api-keys/:id",
+    requirePermission("manage_settings"),
+    vValidator(
+      "param",
+      v.object({
+        id: v.pipe(
+          v.string(),
+          v.transform(Number),
+          v.integer(),
+          v.minValue(1),
+          v.maxValue(Number.MAX_SAFE_INTEGER),
+        ),
+      }),
+    ),
+    vValidator("json", v.object({ permissions: v.array(v.picklist(PERMISSIONS)) })),
+    async (c) => {
+      const user = c.get("user");
+      if (!user) return c.json({ error: "Unauthorized" }, 401);
+      const { id } = c.req.valid("param");
+      const requestedPermissions = c.req.valid("json").permissions;
+      const permissions = [...new Set(requestedPermissions)];
+      if (permissions.some((permission) => !user.permissions.includes(permission))) {
+        return c.json(
+          { error: "API keys can only use permissions assigned to your account." },
+          403,
+        );
+      }
+      const row = await updateApiKeyPermissions.get(JSON.stringify(permissions), id, user.id);
+      if (!row) return c.json({ error: "API key not found" }, 404);
+      return c.json(serializeApiKey(row, { name: user.name, avatarUrl: user.avatarUrl }));
+    },
+  )
+
+  .delete(
+    "/api-keys/:id",
+    requirePermission("manage_settings"),
+    vValidator(
+      "param",
+      v.object({
+        id: v.pipe(
+          v.string(),
+          v.transform(Number),
+          v.integer(),
+          v.minValue(1),
+          v.maxValue(Number.MAX_SAFE_INTEGER),
+        ),
+      }),
+    ),
+    async (c) => {
+      const user = c.get("user");
+      if (!user) return c.json({ error: "Unauthorized" }, 401);
+      const { id } = c.req.valid("param");
+      if (!(await deleteApiKey.get(id, user.id))) {
+        return c.json({ error: "API key not found" }, 404);
+      }
+      return c.json({ ok: true as const });
+    },
+  )
 
   .patch(
     "/",
@@ -370,7 +550,13 @@ export const settings = new Hono<AppEnv>()
         }
       }
       await saveWorkspace(body);
-      return c.json(await snapshot(publicOrigin(c)));
+      const user = c.get("user");
+      return c.json(
+        await snapshot(
+          publicOrigin(c),
+          Boolean(user && hasPermission(user.permissions, "manage_staff")),
+        ),
+      );
     },
   )
 
@@ -393,7 +579,13 @@ export const settings = new Hono<AppEnv>()
     ),
     async (c) => {
       await saveBranding(c.req.valid("json"));
-      return c.json(await snapshot(publicOrigin(c)));
+      const user = c.get("user");
+      return c.json(
+        await snapshot(
+          publicOrigin(c),
+          Boolean(user && hasPermission(user.permissions, "manage_staff")),
+        ),
+      );
     },
   )
 
@@ -422,6 +614,32 @@ export const settings = new Hono<AppEnv>()
         return c.json({ error: "You cannot change your own account here." }, 400);
 
       const body = c.req.valid("json");
+      let targetRole: RoleRow | undefined;
+      if (body.roleId !== undefined) {
+        if (!actor || !hasPermission(actor.permissions, "manage_roles")) {
+          return c.json({ error: "Manage roles permission is required to change a role." }, 403);
+        }
+        targetRole = await findRole.get(body.roleId);
+        if (!targetRole) return c.json({ error: "Role not found" }, 404);
+        const rolePermissions = parsePermissions(targetRole.permissions);
+        if (rolePermissions.some((permission) => !actor.permissions.includes(permission))) {
+          return c.json(
+            { error: "You can only assign roles with permissions available to your account." },
+            403,
+          );
+        }
+        if (
+          (await isOwnerRole(targetRole.id)) &&
+          (!(await isOwnerRole(actor.roleId)) ||
+            !PERMISSIONS.every((permission) => actor.permissions.includes(permission)))
+        ) {
+          return c.json({ error: "Only an owner can assign the Owner role." }, 403);
+        }
+        if ((await isOwnerRole(person.role_id)) && (await countOwners()) <= 1) {
+          return c.json({ error: "The workspace needs at least one owner." }, 400);
+        }
+      }
+
       if (body.suspended !== undefined) {
         if ((await isOwnerRole(person.role_id)) && (await countOwners()) <= 1 && body.suspended) {
           return c.json({ error: "The workspace needs at least one owner." }, 400);
@@ -429,14 +647,7 @@ export const settings = new Hono<AppEnv>()
         await setSuspended.run(body.suspended ? 1 : 0, id);
       }
 
-      if (body.roleId !== undefined) {
-        const role = await findRole.get(body.roleId);
-        if (!role) return c.json({ error: "Role not found" }, 404);
-        if ((await isOwnerRole(person.role_id)) && (await countOwners()) <= 1) {
-          return c.json({ error: "The workspace needs at least one owner." }, 400);
-        }
-        await setUserRole.run(role.id, id);
-      }
+      if (targetRole) await setUserRole.run(targetRole.id, id);
 
       return c.json({ user: serializeUser((await findPerson.get(id)) ?? person) });
     },
@@ -477,6 +688,13 @@ export const settings = new Hono<AppEnv>()
     ),
     async (c) => {
       const { name, permissions, iconUrl } = c.req.valid("json");
+      const user = c.get("user");
+      if (!user || permissions.some((permission) => !user.permissions.includes(permission))) {
+        return c.json(
+          { error: "Roles can only grant permissions assigned to your account." },
+          403,
+        );
+      }
       if (await findRoleByName.get(name)) {
         return c.json({ error: "A role with that name already exists." }, 409);
       }
@@ -538,6 +756,13 @@ export const settings = new Hono<AppEnv>()
       const body = c.req.valid("json");
       if (role.locked === 1 && body.permissions !== undefined) {
         return c.json({ error: "This role's permissions are locked." }, 400);
+      }
+      const user = c.get("user");
+      if (body.permissions?.some((permission) => !user?.permissions.includes(permission))) {
+        return c.json(
+          { error: "Roles can only grant permissions assigned to your account." },
+          403,
+        );
       }
 
       const name = body.name?.trim() || role.name;
@@ -634,7 +859,7 @@ export const settings = new Hono<AppEnv>()
       const id = Number(c.req.valid("param").id);
       if (!Number.isInteger(id)) return c.json({ error: "Invalid invite" }, 400);
       await deleteInvite.run(id);
-      return c.json(await snapshot(publicOrigin(c)));
+      return c.json(await snapshot(publicOrigin(c), true));
     },
   )
 
@@ -655,6 +880,6 @@ export const settings = new Hono<AppEnv>()
         return c.json({ error: "The workspace needs at least one staff member." }, 400);
       }
       await setUserRole.run(await memberRoleId(), id);
-      return c.json(await snapshot(publicOrigin(c)));
+      return c.json(await snapshot(publicOrigin(c), true));
     },
   );
