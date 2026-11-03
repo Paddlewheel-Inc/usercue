@@ -67,7 +67,7 @@ export const ogPost = db.query<OgPost>(
 );
 
 export const ogEntry = db.query<OgEntry>(
-  "SELECT id, title, body, image_url, created_at, updated_at FROM changelog_entries WHERE id = ?",
+  "SELECT id, title, body, image_url, published_at AS created_at, updated_at FROM changelog_entries WHERE id = ? AND published_at IS NOT NULL AND published_at <= FLOOR(EXTRACT(EPOCH FROM NOW()))::BIGINT",
 );
 
 interface Meta {

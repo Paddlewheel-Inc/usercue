@@ -1,6 +1,7 @@
 export const STATUSES = ["open", "planned", "in_progress", "complete", "closed"] as const;
 export type BuiltinStatus = (typeof STATUSES)[number];
 export type Status = string;
+export * from "./changelog";
 export * from "./workflow";
 
 export const STATUS_LABELS: Record<Status, string> = {

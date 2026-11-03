@@ -279,6 +279,7 @@ const SCHEMA = `
     author_name TEXT NOT NULL,
     post_id     INTEGER REFERENCES posts(id) ON DELETE SET NULL,
     image_url   TEXT NOT NULL DEFAULT '',
+    published_at BIGINT DEFAULT (EXTRACT(EPOCH FROM NOW())::BIGINT),
     created_at  BIGINT NOT NULL DEFAULT (EXTRACT(EPOCH FROM NOW())::BIGINT),
     updated_at  BIGINT NOT NULL DEFAULT (EXTRACT(EPOCH FROM NOW())::BIGINT)
   );
@@ -536,6 +537,18 @@ const MIGRATE = `
   ALTER TABLE workspace ADD COLUMN IF NOT EXISTS site_description TEXT NOT NULL DEFAULT '';
   ALTER TABLE workspace ADD COLUMN IF NOT EXISTS favicon_url TEXT NOT NULL DEFAULT '';
   ALTER TABLE workspace ADD COLUMN IF NOT EXISTS share_image_url TEXT NOT NULL DEFAULT '';
+  DO $$
+  BEGIN
+    IF NOT EXISTS (
+      SELECT 1 FROM information_schema.columns
+      WHERE table_schema = current_schema() AND table_name = 'changelog_entries' AND column_name = 'published_at'
+    ) THEN
+      ALTER TABLE changelog_entries ADD COLUMN published_at BIGINT DEFAULT (EXTRACT(EPOCH FROM NOW())::BIGINT);
+      UPDATE changelog_entries SET published_at = created_at;
+    END IF;
+  END $$;
+  CREATE INDEX IF NOT EXISTS changelog_entries_published ON changelog_entries(published_at DESC, id DESC) WHERE published_at IS NOT NULL;
+
 `;
 
 function ident(name: string): string {
