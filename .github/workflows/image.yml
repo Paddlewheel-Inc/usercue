@@ -23,6 +23,17 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: usercue
+          POSTGRES_PASSWORD: usercue-test
+          POSTGRES_DB: usercue_test
+        ports: [5432:5432]
+        options: >-
+          --health-cmd "pg_isready -U usercue -d usercue_test"
+          --health-interval 5s --health-timeout 5s --health-retries 12
     outputs:
       reference: ${{ steps.image.outputs.reference }}
     env:
@@ -56,6 +67,11 @@ jobs:
 
       - run: bun install --frozen-lockfile
       - run: bun run test:release
+      - name: Test fresh database startup and migration
+        if: hashFiles('apps/server/src/db.test.ts') != ''
+        env:
+          TEST_DATABASE_URL: postgres://usercue:usercue-test@localhost:5432/usercue_test
+        run: bun test apps/server/src/db.test.ts
       - run: bun run typecheck
       - run: bun run lint
 

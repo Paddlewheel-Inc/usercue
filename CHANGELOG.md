@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [1.0.1]
+
+- Fix database initialization on fresh installations and preserve existing API key permissions during upgrades.
+
 ## [1.0.0]
 
 - Initial versioned release.
