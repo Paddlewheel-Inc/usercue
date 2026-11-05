@@ -28,18 +28,25 @@ const child = Bun.spawn(["docker", "manifest", "inspect", `${image}:latest`], {
 const [error, code] = await Promise.all([new Response(child.stderr).text(), child.exited]);
 if (code === 0) {
   await command(["docker", "pull", `${image}:latest`]);
-  const current = await command([
-    "docker",
-    "image",
-    "inspect",
-    `${image}:latest`,
-    "--format",
-    '{{ index .Config.Labels "org.opencontainers.image.version" }}',
-  ]);
-  // The old workflow did not label versions. Only the initial baseline may replace it.
-  if (!current || current === "<no value>") {
+  const config = JSON.parse(
+    await command([
+      "docker",
+      "image",
+      "inspect",
+      `${image}:latest`,
+      "--format",
+      "{{json .Config}}",
+    ]),
+  ) as { Env?: string[]; Labels?: Record<string, string> };
+  // Older images inherit Bun's version label. Only our build revision environment
+  // variable identifies an image built with UserCue release metadata.
+  const managed = config.Env?.some((entry) => entry.startsWith("USERCUE_REVISION="));
+  const current = config.Labels?.["org.opencontainers.image.version"];
+  if (!managed) {
     if (version !== "1.0.0")
       throw new Error("Unversioned latest requires the v1.0.0 baseline first.");
+  } else if (!current) {
+    throw new Error("UserCue latest image is missing its version label.");
   } else if (compareVersions(version, current) < 0) {
     console.log(`Keeping latest at ${current}; published ${tag} remains available by version.`);
     process.exit(0);

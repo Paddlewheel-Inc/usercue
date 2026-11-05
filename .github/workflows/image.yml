@@ -141,8 +141,18 @@ jobs:
             echo 'Publishing this image does not update any deployed instances.'
           } >> "$GITHUB_STEP_SUMMARY"
 
+      # Use the workflow's tooling so manual runs can repair aliases for older releases.
+      - name: Check out publication tooling
+        if: ${{ !contains(env.RELEASE_TAG, '-') }}
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: .release-tools
+          sparse-checkout: scripts
+          persist-credentials: false
+
       - name: Promote stable latest without downgrading
         if: ${{ !contains(env.RELEASE_TAG, '-') }}
         env:
           IMAGE_REFERENCE: ${{ steps.image.outputs.reference }}
-        run: bun scripts/promote-latest.ts
+        run: bun .release-tools/scripts/promote-latest.ts

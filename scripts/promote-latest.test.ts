@@ -3,7 +3,12 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
-async function promotion(options: { current?: string; error?: string; version?: string }) {
+async function promotion(options: {
+  current?: string;
+  error?: string;
+  version?: string;
+  legacy?: boolean;
+}) {
   const directory = await mkdtemp(join(tmpdir(), "usercue-promotion-"));
   const log = join(directory, "calls.jsonl");
   try {
@@ -13,7 +18,7 @@ async function promotion(options: { current?: string; error?: string; version?: 
         "const args = process.argv.slice(2);\n" +
         'await Bun.write(process.env.CALL_LOG, (await Bun.file(process.env.CALL_LOG).text().catch(() => "")) + JSON.stringify(args) + "\\n");\n' +
         'if (args[0] === "manifest" && process.env.INSPECT_ERROR) { console.error(process.env.INSPECT_ERROR); process.exit(1); }\n' +
-        'if (args[0] === "image") console.log(process.env.CURRENT_VERSION);\n'
+        'if (args[0] === "image") console.log(JSON.stringify({ Labels: { "org.opencontainers.image.version": process.env.CURRENT_VERSION }, Env: process.env.LEGACY_IMAGE === "true" ? [] : ["USERCUE_REVISION=example"] }));\n'
       }`,
       { mode: 0o755 },
     );
@@ -23,6 +28,7 @@ async function promotion(options: { current?: string; error?: string; version?: 
         PATH: `${directory}:${process.env.PATH}`,
         CALL_LOG: log,
         CURRENT_VERSION: options.current ?? "",
+        LEGACY_IMAGE: String(options.legacy ?? false),
         INSPECT_ERROR: options.error ?? "",
         RELEASE_TAG: `v${options.version ?? "1.0.0"}`,
         IMAGE: "ghcr.io/example/usercue",
@@ -74,7 +80,7 @@ test("same-version retry can complete latest promotion", async () => {
 });
 
 test("first release can create latest or replace the legacy unlabeled image", async () => {
-  for (const options of [{ error: "manifest unknown" }, { current: "<no value>" }]) {
+  for (const options of [{ error: "manifest unknown" }, { current: "1.4.4", legacy: true }]) {
     const result = await promotion(options);
     expect(result.code).toBe(0);
     expect(result.promoted).toBe(true);
@@ -101,4 +107,13 @@ test("unexpected latest metadata fails closed after the baseline", async () => {
     expect(result.code).not.toBe(0);
     expect(result.promoted).toBe(false);
   }
+});
+
+test("Bun metadata is treated as legacy only for the initial UserCue release", async () => {
+  const initial = await promotion({ current: "1.4.4", legacy: true });
+  expect(initial.code).toBe(0);
+  expect(initial.promoted).toBe(true);
+  const later = await promotion({ current: "1.4.4", legacy: true, version: "1.0.1" });
+  expect(later.code).not.toBe(0);
+  expect(later.promoted).toBe(false);
 });
