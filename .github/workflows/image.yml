@@ -20,7 +20,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  publish:
+  validate:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     services:
@@ -35,7 +35,8 @@ jobs:
           --health-cmd "pg_isready -U usercue -d usercue_test"
           --health-interval 5s --health-timeout 5s --health-retries 12
     outputs:
-      reference: ${{ steps.image.outputs.reference }}
+      version: ${{ steps.source.outputs.version }}
+      revision: ${{ steps.source.outputs.revision }}
     env:
       IMAGE: ghcr.io/paddlewheel-inc/usercue
       RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
@@ -75,21 +76,41 @@ jobs:
       - run: bun run typecheck
       - run: bun run lint
 
-      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
-
-      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+  build:
+    needs: validate
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    env:
+      IMAGE: ghcr.io/paddlewheel-inc/usercue
+      RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
+      ARCH: ${{ matrix.arch }}
+      BUILD_IMAGE: ghcr.io/paddlewheel-inc/usercue:build-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.arch }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: refs/tags/${{ env.RELEASE_TAG }}
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
+          password: ${{ github.token }}
       - name: Check for an existing immutable release
         id: existing
         env:
           REGISTRY_USER: ${{ github.actor }}
           REGISTRY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
-          EXPECTED_REVISION: ${{ steps.source.outputs.revision }}
-          EXPECTED_VERSION: ${{ steps.source.outputs.version }}
+          EXPECTED_REVISION: ${{ needs.validate.outputs.revision }}
+          EXPECTED_VERSION: ${{ needs.validate.outputs.version }}
         run: |
           token=$(curl --fail --silent --show-error --get --user "$REGISTRY_USER:$REGISTRY_PASSWORD" \
             --data-urlencode 'service=ghcr.io' \
@@ -103,39 +124,44 @@ jobs:
           case "$status" in
             404) echo 'exists=false' >> "$GITHUB_OUTPUT" ;;
             200)
-              docker pull "$IMAGE:$RELEASE_TAG"
+              docker pull --platform "linux/$ARCH" "$IMAGE:$RELEASE_TAG"
               revision=$(docker image inspect "$IMAGE:$RELEASE_TAG" --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}')
               version=$(docker image inspect "$IMAGE:$RELEASE_TAG" --format '{{ index .Config.Labels "org.opencontainers.image.version" }}')
               if [[ "$revision" != "$EXPECTED_REVISION" || "$version" != "$EXPECTED_VERSION" ]]; then
                 echo '::error::This version already identifies a different build. Publish a new version.'
                 exit 1
               fi
+              architecture=$(docker image inspect "$IMAGE:$RELEASE_TAG" --format '{{.Architecture}}')
+              if [[ "$architecture" != "$ARCH" ]]; then
+                echo '::error::This existing release does not include both architectures. Publish a new version.'
+                exit 1
+              fi
+              docker tag "$IMAGE:$RELEASE_TAG" "$BUILD_IMAGE"
               echo 'exists=true' >> "$GITHUB_OUTPUT"
               ;;
             *) echo "::error::Registry lookup failed (HTTP $status); refusing to publish."; exit 1 ;;
           esac
 
-      - name: Build release locally
+      - name: Build native release image
         if: steps.existing.outputs.exists != 'true'
-        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8
         with:
           context: .
           load: true
-          platforms: linux/amd64
-          tags: ${{ env.IMAGE }}:${{ env.RELEASE_TAG }}
+          platforms: linux/${{ matrix.arch }}
+          tags: ${{ env.BUILD_IMAGE }}
           build-args: |
-            APP_VERSION=${{ steps.source.outputs.version }}
-            SOURCE_REVISION=${{ steps.source.outputs.revision }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
+            APP_VERSION=${{ needs.validate.outputs.version }}
+            SOURCE_REVISION=${{ needs.validate.outputs.revision }}
+          cache-from: type=gha,scope=app-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=app-${{ matrix.arch }}
       - name: Verify packaged application before publication
         env:
-          EXPECTED_VERSION: ${{ steps.source.outputs.version }}
-          EXPECTED_REVISION: ${{ steps.source.outputs.revision }}
+          EXPECTED_VERSION: ${{ needs.validate.outputs.version }}
+          EXPECTED_REVISION: ${{ needs.validate.outputs.revision }}
         run: |
           docker run --rm --entrypoint bun \
-            -e EXPECTED_VERSION -e EXPECTED_REVISION "$IMAGE:$RELEASE_TAG" -e '
+            -e EXPECTED_VERSION -e EXPECTED_REVISION "$BUILD_IMAGE" -e '
               const { versionRoutes } = await import("./apps/server/src/version.ts");
               const response = await versionRoutes.request("/version");
               const body = await response.json();
@@ -144,36 +170,68 @@ jobs:
                   !(await Bun.file("./apps/web/dist/index.html").exists())) process.exit(1);
             '
 
-      - name: Publish version image
+      - name: Upload verified platform image
         if: steps.existing.outputs.exists != 'true'
-        run: docker push "$IMAGE:$RELEASE_TAG"
-
-      - name: Record published digest
-        id: image
+        run: docker push "$BUILD_IMAGE"
+      - name: Record verified platform digest
         run: |
-          reference=$(docker image inspect "$IMAGE:$RELEASE_TAG" --format '{{index .RepoDigests 0}}')
-          echo "reference=$reference" >> "$GITHUB_OUTPUT"
-          {
-            echo "### UserCue $RELEASE_TAG"
-            echo "Image: \`$reference\`"
-            echo 'Publishing this image does not update any deployed instances.'
-          } >> "$GITHUB_STEP_SUMMARY"
+          mkdir -p digests
+          docker image inspect "$BUILD_IMAGE" --format '{{index .RepoDigests 0}}' > "digests/$ARCH.txt"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: app-digest-${{ matrix.arch }}
+          path: digests/${{ matrix.arch }}.txt
+          retention-days: 1
+          if-no-files-found: error
 
-      # Use the workflow's tooling so manual runs can repair aliases for older releases.
-      - name: Check out publication tooling
-        if: ${{ !contains(env.RELEASE_TAG, '-') }}
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+  publish:
+    needs: [validate, build]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      reference: ${{ steps.image.outputs.reference }}
+    env:
+      IMAGE: ghcr.io/paddlewheel-inc/usercue
+      RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           ref: ${{ github.workflow_sha }}
-          path: .release-tools
-          sparse-checkout: scripts
           persist-credentials: false
-
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+        with:
+          bun-version: "1.4.4"
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          pattern: app-digest-*
+          path: digests
+          merge-multiple: true
+      - name: Publish verified multi-platform version
+        id: image
+        env:
+          REGISTRY_USER: ${{ github.actor }}
+          REGISTRY_PASSWORD: ${{ github.token }}
+        run: python3 scripts/image-manifest.py merge "$IMAGE" "$RELEASE_TAG" digests
       - name: Promote stable latest without downgrading
         if: ${{ !contains(env.RELEASE_TAG, '-') }}
         env:
           IMAGE_REFERENCE: ${{ steps.image.outputs.reference }}
-        run: bun .release-tools/scripts/promote-latest.ts
+        run: bun scripts/promote-latest.ts
+      - name: Publication summary
+        env:
+          IMAGE_REFERENCE: ${{ steps.image.outputs.reference }}
+        run: |
+          {
+            echo "### UserCue $RELEASE_TAG"
+            echo "Image: \`$IMAGE_REFERENCE\`"
+            echo 'Platforms: linux/amd64, linux/arm64. Publishing does not update deployed instances.'
+          } >> "$GITHUB_STEP_SUMMARY"
 
   hosted-image:
     needs: publish
