@@ -23,6 +23,8 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    outputs:
+      reference: ${{ steps.image.outputs.reference }}
     env:
       IMAGE: ghcr.io/paddlewheel-inc/usercue
       RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
@@ -156,3 +158,25 @@ jobs:
         env:
           IMAGE_REFERENCE: ${{ steps.image.outputs.reference }}
         run: bun .release-tools/scripts/promote-latest.ts
+
+  hosted-image:
+    needs: publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: Request downstream image publication
+        env:
+          GH_TOKEN: ${{ secrets.HOSTED_IMAGE_WORKFLOW_TOKEN }}
+          TARGET_REPOSITORY: ${{ vars.HOSTED_IMAGE_REPOSITORY }}
+          RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
+          IMAGE_REFERENCE: ${{ needs.publish.outputs.reference }}
+        run: |
+          if [[ -z "$GH_TOKEN" || ! "$TARGET_REPOSITORY" =~ ^[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+$ ]]; then
+            echo '::error::Configure HOSTED_IMAGE_WORKFLOW_TOKEN and HOSTED_IMAGE_REPOSITORY to enable downstream publication. The application image is already published; rerun this job after configuring them.'
+            exit 1
+          fi
+          gh api --method POST "repos/$TARGET_REPOSITORY/actions/workflows/hosted-image.yml/dispatches" \
+            -H 'X-GitHub-Api-Version: 2026-03-10' \
+            -f ref=main -f "inputs[tag]=$RELEASE_TAG" -f "inputs[app_image]=$IMAGE_REFERENCE"
+          echo 'Downstream image publication requested. Check the receiving repository for its build result.' >> "$GITHUB_STEP_SUMMARY"
