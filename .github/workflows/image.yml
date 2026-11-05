@@ -1,41 +1,148 @@
 name: Release image
 
 on:
+  release:
+    types: [published]
   workflow_dispatch:
     inputs:
       tag:
-        description: Tag to publish with this release
+        description: Existing release tag to publish (for example v1.0.0)
         required: true
-        default: latest
         type: string
 
 permissions:
   contents: read
   packages: write
 
+# Serialize the version check, publication, and latest promotion together.
+concurrency:
+  group: usercue-image-publication
+  cancel-in-progress: false
+
 jobs:
   publish:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      IMAGE: ghcr.io/paddlewheel-inc/usercue
+      RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
     steps:
-      - uses: actions/checkout@v4
+      - name: Validate tag input
+        shell: bash
+        run: |
+          if [[ ! "$RELEASE_TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-rc\.(0|[1-9][0-9]*))?$ ]] || (( ${#RELEASE_TAG} > 128 )); then
+            echo "::error::Use vX.Y.Z or vX.Y.Z-rc.N; branches and arbitrary tags are not releases."
+            exit 1
+          fi
 
-      - uses: docker/setup-buildx-action@v3
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: refs/tags/${{ env.RELEASE_TAG }}
+          fetch-depth: 0
 
-      - uses: docker/login-action@v3
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: "1.4.4"
+
+      - name: Validate release source
+        id: source
+        run: |
+          git merge-base --is-ancestor HEAD origin/main
+          bun run version:check
+          echo "version=${RELEASE_TAG#v}" >> "$GITHUB_OUTPUT"
+          echo "revision=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - run: bun install --frozen-lockfile
+      - run: bun run test:release
+      - run: bun run typecheck
+      - run: bun run lint
+
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - uses: docker/build-push-action@v6
+      - name: Check for an existing immutable release
+        id: existing
+        env:
+          REGISTRY_USER: ${{ github.actor }}
+          REGISTRY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
+          EXPECTED_REVISION: ${{ steps.source.outputs.revision }}
+          EXPECTED_VERSION: ${{ steps.source.outputs.version }}
+        run: |
+          token=$(curl --fail --silent --show-error --get --user "$REGISTRY_USER:$REGISTRY_PASSWORD" \
+            --data-urlencode 'service=ghcr.io' \
+            --data-urlencode 'scope=repository:paddlewheel-inc/usercue:pull' \
+            https://ghcr.io/token | jq -er '.token')
+          echo "::add-mask::$token"
+          status=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+            -H "Authorization: Bearer $token" \
+            -H 'Accept: application/vnd.oci.image.index.v1+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.docker.distribution.manifest.v2+json' \
+            "https://ghcr.io/v2/paddlewheel-inc/usercue/manifests/$RELEASE_TAG")
+          case "$status" in
+            404) echo 'exists=false' >> "$GITHUB_OUTPUT" ;;
+            200)
+              docker pull "$IMAGE:$RELEASE_TAG"
+              revision=$(docker image inspect "$IMAGE:$RELEASE_TAG" --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}')
+              version=$(docker image inspect "$IMAGE:$RELEASE_TAG" --format '{{ index .Config.Labels "org.opencontainers.image.version" }}')
+              if [[ "$revision" != "$EXPECTED_REVISION" || "$version" != "$EXPECTED_VERSION" ]]; then
+                echo '::error::This version already identifies a different build. Publish a new version.'
+                exit 1
+              fi
+              echo 'exists=true' >> "$GITHUB_OUTPUT"
+              ;;
+            *) echo "::error::Registry lookup failed (HTTP $status); refusing to publish."; exit 1 ;;
+          esac
+
+      - name: Build release locally
+        if: steps.existing.outputs.exists != 'true'
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: .
-          push: true
-          tags: |
-            ghcr.io/paddlewheel-inc/usercue:latest
-            ghcr.io/paddlewheel-inc/usercue:${{ github.sha }}
-            ghcr.io/paddlewheel-inc/usercue:${{ inputs.tag }}
-          labels: |
-            org.opencontainers.image.source=https://github.com/Paddlewheel-Inc/usercue
+          load: true
+          platforms: linux/amd64
+          tags: ${{ env.IMAGE }}:${{ env.RELEASE_TAG }}
+          build-args: |
+            APP_VERSION=${{ steps.source.outputs.version }}
+            SOURCE_REVISION=${{ steps.source.outputs.revision }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Verify packaged application before publication
+        env:
+          EXPECTED_VERSION: ${{ steps.source.outputs.version }}
+          EXPECTED_REVISION: ${{ steps.source.outputs.revision }}
+        run: |
+          docker run --rm --entrypoint bun \
+            -e EXPECTED_VERSION -e EXPECTED_REVISION "$IMAGE:$RELEASE_TAG" -e '
+              const { versionRoutes } = await import("./apps/server/src/version.ts");
+              const response = await versionRoutes.request("/version");
+              const body = await response.json();
+              if (response.status !== 200 || body.version !== process.env.EXPECTED_VERSION ||
+                  body.revision !== process.env.EXPECTED_REVISION ||
+                  !(await Bun.file("./apps/web/dist/index.html").exists())) process.exit(1);
+            '
+
+      - name: Publish version image
+        if: steps.existing.outputs.exists != 'true'
+        run: docker push "$IMAGE:$RELEASE_TAG"
+
+      - name: Record published digest
+        id: image
+        run: |
+          reference=$(docker image inspect "$IMAGE:$RELEASE_TAG" --format '{{index .RepoDigests 0}}')
+          echo "reference=$reference" >> "$GITHUB_OUTPUT"
+          {
+            echo "### UserCue $RELEASE_TAG"
+            echo "Image: \`$reference\`"
+            echo 'Publishing this image does not update any deployed instances.'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Promote stable latest without downgrading
+        if: ${{ !contains(env.RELEASE_TAG, '-') }}
+        env:
+          IMAGE_REFERENCE: ${{ steps.image.outputs.reference }}
+        run: bun scripts/promote-latest.ts

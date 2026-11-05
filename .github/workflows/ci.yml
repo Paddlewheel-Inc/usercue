@@ -17,6 +17,12 @@ jobs:
 
       - run: bun install --frozen-lockfile
 
+      - name: Validate application version
+        run: bun run version:check
+
+      - name: Test release safeguards
+        run: bun run test:release
+
       - name: typecheck
         run: bun run typecheck
 

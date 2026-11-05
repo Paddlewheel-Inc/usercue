@@ -65,6 +65,10 @@ Copy `.env.example` if you need to point at another database, turn on secure coo
 
 The React app is `apps/web`. The API is `apps/server`. Shared types and limits are `packages/shared`. Schema is applied from `apps/server/src/db.ts` on startup. Pages talk to the API through the typed client in `apps/web/src/lib/api.ts`. They do not talk to Postgres.
 
+## Application releases
+
+See [merging changes and publishing updates](docs/releases.md).
+
 ## Docs
 
 Product setup, OAuth, and settings are in the [documentation](https://docs.usercue.app).

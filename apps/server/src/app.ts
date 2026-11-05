@@ -14,6 +14,7 @@ import { settings } from "./routes/settings";
 import { tags } from "./routes/tags";
 import { uploads } from "./routes/uploads";
 import { workflow } from "./routes/workflow";
+import { versionRoutes } from "./version";
 
 const publicApi = new Hono<AppEnv>()
   .use("*", requireApiKey)
@@ -43,6 +44,7 @@ const api = new Hono<AppEnv>()
 
 export const app = new Hono()
   .use(secureHeaders())
+  .route("/api", versionRoutes)
   .route("/api", api)
   .onError((err, c) => {
     if (err instanceof HTTPException) return err.getResponse();
