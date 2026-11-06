@@ -15,6 +15,7 @@ WORKDIR /app
 ARG APP_VERSION=development
 ARG SOURCE_REVISION=unknown
 LABEL org.opencontainers.image.version=$APP_VERSION \
+      io.usercue.app-version=$APP_VERSION \
       org.opencontainers.image.revision=$SOURCE_REVISION \
       org.opencontainers.image.source="https://github.com/Paddlewheel-Inc/usercue"
 ENV USERCUE_REVISION=$SOURCE_REVISION

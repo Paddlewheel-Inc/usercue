@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [1.0.3]
+
+- Implemented app version label to Dockerfile for better version tracking on hosted versions of Usercue
+
 ## [1.0.2]
 
 - Publish native AMD64 and ARM64 Docker images under matching release tags.
