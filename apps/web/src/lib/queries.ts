@@ -522,7 +522,7 @@ export function useInviteStaff() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (email: string) => unwrap(api.settings.invites.$post({ json: { email } })),
-    onSuccess: () =>
+    onSettled: () =>
       Promise.all([
         qc.invalidateQueries({ queryKey: ["settings"] }),
         qc.invalidateQueries({ queryKey: ["settings-users"] }),

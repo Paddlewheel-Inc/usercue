@@ -1221,6 +1221,9 @@ function GeneralSettings() {
 
   if (isLoading || !data) return null;
 
+  const seats = data.plan.limits.find((limit) => limit.key === "staffSeats");
+  const seatsFull = Boolean(seats?.reached);
+
   function toggleGuest(allowGuestFeedback: boolean) {
     save.mutate({ allowGuestFeedback });
   }
@@ -1350,6 +1353,12 @@ function GeneralSettings() {
               Invite someone to the dashboard. They set their own password from the registration
               link.
             </p>
+            {seats && seats.max !== null && (
+              <p className="mt-1 text-[12px] text-faint">
+                {seats.used} of {seats.max} {seats.unit} used on the {data.plan.label} plan. Pending
+                invites count toward this.
+              </p>
+            )}
           </div>
 
           <ul className="flex flex-col gap-2">
@@ -1379,6 +1388,19 @@ function GeneralSettings() {
             ))}
           </ul>
 
+          {seatsFull && seats && seats.max !== null && (
+            <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2.5 text-[12px] leading-5">
+              <p className="font-medium">
+                This instance has reached its limit of {seats.max} staff users.
+              </p>
+              <p className="mt-0.5 text-muted">
+                The {data.plan.label} plan includes {seats.max} {seats.unit}. Upgrade this instance
+                to Pro, or get an additional instance, from your UserCue account to invite more
+                people. Revoking a pending invite also frees a seat.
+              </p>
+            </div>
+          )}
+
           <form onSubmit={submitInvite} className="flex flex-col gap-2 sm:flex-row">
             <input
               className="input"
@@ -1386,9 +1408,14 @@ function GeneralSettings() {
               placeholder="staff@example.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
+              disabled={seatsFull}
               required
             />
-            <button type="submit" className="btn-primary shrink-0" disabled={invite.isPending}>
+            <button
+              type="submit"
+              className="btn-primary shrink-0"
+              disabled={invite.isPending || seatsFull}
+            >
               Invite
             </button>
           </form>
