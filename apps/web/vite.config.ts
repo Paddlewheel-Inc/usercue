@@ -65,7 +65,7 @@ export default defineConfig(({ mode }) => {
           navigateFallbackDenylist: [/^\/api\//, /^\/uploads\//],
         },
         devOptions: {
-          enabled: true,
+          enabled: env.PWA_DEV === "true",
           suppressWarnings: true,
         },
       }),
