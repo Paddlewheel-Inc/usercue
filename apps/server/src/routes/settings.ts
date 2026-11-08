@@ -12,6 +12,7 @@ import {
 import { Hono } from "hono";
 import * as v from "valibot";
 import { db } from "../db";
+import { planSnapshot, withinPlanLimit } from "../entitlements";
 import { env } from "../env";
 import { resendConfigured, resendCredentials, resendEnabled, sendInviteEmail } from "../mail";
 import { type AppEnv, randomToken, requirePermission, requireTeam } from "../middleware";
@@ -325,6 +326,7 @@ async function snapshot(origin: string, includeStaff: boolean) {
     invites: includeStaff
       ? (await listInvites.all(now)).map((row) => serializeInvite(origin, row))
       : [],
+    plan: await planSnapshot(),
   };
 }
 
@@ -673,7 +675,15 @@ export const settings = new Hono<AppEnv>()
         await setSuspended.run(body.suspended ? 1 : 0, id);
       }
 
-      if (targetRole) await setUserRole.run(targetRole.id, id);
+      if (targetRole) {
+        const role = targetRole;
+        const grantsStaff =
+          parsePermissions(role.permissions).includes("dashboard") && !isStaffRow(person);
+        const outcome = await withinPlanLimit("staffSeats", grantsStaff ? 1 : 0, () =>
+          setUserRole.run(role.id, id),
+        );
+        if ("blocked" in outcome) return c.json(outcome.blocked, 403);
+      }
 
       return c.json({ user: serializeUser((await findPerson.get(id)) ?? person) });
     },
@@ -791,7 +801,14 @@ export const settings = new Hono<AppEnv>()
       }
       const permissions = body.permissions ?? parsePermissions(role.permissions);
       const iconUrl = body.iconUrl !== undefined ? body.iconUrl : role.icon_url;
-      await updateRole.run(name, encodePermissions(permissions), iconUrl, id);
+      const grantsStaff =
+        permissions.includes("dashboard") &&
+        !parsePermissions(role.permissions).includes("dashboard");
+      const adding = grantsStaff ? ((await countRoleUsers.get(id))?.n ?? 0) : 0;
+      const outcome = await withinPlanLimit("staffSeats", adding, () =>
+        updateRole.run(name, encodePermissions(permissions), iconUrl, id),
+      );
+      if ("blocked" in outcome) return c.json(outcome.blocked, 403);
       return c.json(await rolesPayload());
     },
   )
@@ -831,7 +848,11 @@ export const settings = new Hono<AppEnv>()
         if (person && isStaffRow(person)) {
           return c.json({ error: "That email already has a staff account." }, 409);
         }
-        await setUserRole.run(await staffRoleId(), existing.id);
+        const roleId = await staffRoleId();
+        const promotion = await withinPlanLimit("staffSeats", 1, () =>
+          setUserRole.run(roleId, existing.id),
+        );
+        if ("blocked" in promotion) return c.json(promotion.blocked, 403);
         const fresh = await findPerson.get(existing.id);
         return c.json({
           promoted: true,
@@ -843,11 +864,16 @@ export const settings = new Hono<AppEnv>()
       const origin = publicOrigin(c);
       const now = Math.floor(Date.now() / 1000);
       const token = randomToken(24);
-      const pending = await findInviteByEmail.get(email, now);
       const invitedBy = c.get("user")?.id ?? null;
-      const row = pending
-        ? await refreshInvite.get(token, now + INVITE_TTL, 0, pending.id)
-        : await insertInvite.get(token, email, invitedBy, now + INVITE_TTL);
+      const alreadyPending = Boolean(await findInviteByEmail.get(email, now));
+      const outcome = await withinPlanLimit("staffSeats", alreadyPending ? 0 : 1, async () => {
+        const pending = await findInviteByEmail.get(email, now);
+        return pending
+          ? await refreshInvite.get(token, now + INVITE_TTL, 0, pending.id)
+          : await insertInvite.get(token, email, invitedBy, now + INVITE_TTL);
+      });
+      if ("blocked" in outcome) return c.json(outcome.blocked, 403);
+      const row = outcome.result;
       if (!row) return c.json({ error: "Could not create the invite." }, 500);
 
       void sendInviteEmail(email, inviteUrl(origin, row.token))

@@ -4,6 +4,7 @@ import { Hono } from "hono";
 import { deleteCookie, getCookie } from "hono/cookie";
 import * as v from "valibot";
 import { db } from "../db";
+import { withinPlanLimit } from "../entitlements";
 import {
   type AppEnv,
   randomToken,
@@ -367,7 +368,11 @@ export const oauth = new Hono<AppEnv>()
           return fail(c, next, "This provider did not share an email.");
         }
         const roleId = next === "admin" ? await staffRoleId() : await memberRoleId();
-        const created = await insertUser.get(email, profile.name, roleId, profile.avatarUrl ?? "");
+        const outcome = await withinPlanLimit("staffSeats", next === "admin" ? 1 : 0, () =>
+          insertUser.get(email, profile.name, roleId, profile.avatarUrl ?? ""),
+        );
+        if ("blocked" in outcome) return fail(c, next, outcome.blocked.error);
+        const created = outcome.result;
         if (!created) return fail(c, next, "Could not create your account.");
         userId = created.id;
       } else {
