@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [1.1.0]
+
+- Add instance plan limits on staff seats. When `USERCUE_PLAN_FILE` points to a plan file, staff accounts and pending invites are capped by the plan. An invalid or unreadable plan file falls back to the free plan. If the variable is unset, nothing is limited.
+- Show staff seat usage and a plan-limit notice in Settings.
+- Register the PWA service worker in dev only when `PWA_DEV=true`.
+
 ## [1.0.3]
 
 - Implemented app version label to Dockerfile for better version tracking on hosted versions of Usercue
