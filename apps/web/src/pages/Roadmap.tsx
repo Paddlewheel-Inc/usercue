@@ -105,7 +105,7 @@ export function Roadmap() {
             status={lane.id}
             hint={
               lane.category === "planned"
-                ? "What we?re doing next"
+                ? "What we're doing next"
                 : lane.category === "in_progress"
                   ? "In motion right now"
                   : "Recently shipped"
