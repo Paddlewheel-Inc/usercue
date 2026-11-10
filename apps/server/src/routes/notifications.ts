@@ -38,6 +38,11 @@ const markAll = db.query(
    WHERE user_id = ? AND read_at IS NULL`,
 );
 
+function notificationKind(kind: string) {
+  if (kind === "role" || kind === "shipped") return kind;
+  return "mention";
+}
+
 const idParam = v.object({
   id: v.pipe(v.string(), v.transform(Number), v.integer(), v.minValue(1)),
 });
@@ -54,7 +59,7 @@ export const notifications = new Hono<AppEnv>()
       unread,
       items: rows.map((row) => ({
         id: row.id,
-        kind: row.kind === "role" ? ("role" as const) : ("mention" as const),
+        kind: notificationKind(row.kind),
         actorName: row.actor_name,
         actorAvatar: row.actor_avatar || null,
         roleName: row.role_name || null,

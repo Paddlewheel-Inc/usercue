@@ -5,6 +5,7 @@ import {
   type ChangelogReaction,
   isEmptyHtml,
   LIMITS,
+  markdownToHtml,
 } from "@usercue/shared";
 import { type FormEvent, type ReactNode, useRef, useState } from "react";
 import { Link, useLocation, useParams } from "wouter";
@@ -21,6 +22,7 @@ import {
   type ChangelogDraft,
   can,
   useAddChangelogComment,
+  useAiChangelog,
   useAuthMethods,
   useChangelog,
   useChangelogEntry,
@@ -538,6 +540,73 @@ function ContributorFields({
   );
 }
 
+const CHANGELOG_MARKDOWN = { headings: true, sections: true };
+
+function ModeSwitch({
+  mode,
+  onChange,
+}: {
+  mode: "rich" | "markdown";
+  onChange: (mode: "rich" | "markdown") => void;
+}) {
+  return (
+    <div className="flex gap-1">
+      {(["rich", "markdown"] as const).map((item) => (
+        <button
+          key={item}
+          type="button"
+          aria-pressed={mode === item}
+          onClick={() => onChange(item)}
+          className={`inline-flex h-7 items-center rounded-full px-3 text-[12px] font-medium transition-colors ${
+            mode === item ? "bg-hover text-fg" : "text-muted hover:text-fg"
+          }`}
+        >
+          {item === "rich" ? "Rich text" : "Markdown"}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function MarkdownField({
+  value,
+  onChange,
+  html,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  html: string;
+}) {
+  return (
+    <div className="flex flex-col gap-2">
+      <textarea
+        className="input min-h-40 resize-y rounded-2xl py-3 font-mono text-[12.5px] leading-5"
+        value={value}
+        maxLength={LIMITS.body}
+        spellCheck={false}
+        placeholder={
+          "## New\n- Dark mode for the board\n\n## Fixed\n- **Votes** no longer reset on refresh"
+        }
+        onChange={(e) => onChange(e.target.value)}
+      />
+      <p className="px-1 text-[11px] leading-4 text-faint">
+        Use <code>## New</code>, <code>## Changed</code>, <code>## Fixed</code>, or{" "}
+        <code>## Removed</code> to tag the bullets beneath, or start a line with{" "}
+        <code>[Fixed]</code>. <code>**bold**</code>, <code>*italic*</code>,{" "}
+        <code>[links](https://…)</code>, and lists work too.
+      </p>
+      {html && (
+        <div className="flex flex-col gap-2 rounded-2xl bg-bg p-4">
+          <span className="text-[11px] font-medium text-muted">Live preview</span>
+          <div className="changelog-body">
+            <RichText html={html} />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function localPublicationTime(timestamp: number) {
   const date = new Date(timestamp * 1000);
   return new Date(date.getTime() - date.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
@@ -557,9 +626,14 @@ function EntryForm({
   onSubmit?: (body: ChangelogDraft) => void;
 }) {
   const create = useCreateChangelogEntry();
+  const draft = useAiChangelog();
+  const { data: me } = useMe();
   const [, navigate] = useLocation();
+  const [editorKey, setEditorKey] = useState(0);
   const [title, setTitle] = useState(entry?.title ?? "");
   const [body, setBody] = useState(entry?.body ?? "");
+  const [markdown, setMarkdown] = useState(entry?.markdown ?? "");
+  const [mode, setMode] = useState<"rich" | "markdown">(entry?.markdown ? "markdown" : "rich");
   const [contributors, setContributors] = useState(entry?.contributors ?? []);
   const [linked, setLinked] = useState(entry?.linkedPost ?? null);
   const [imageUrl, setImageUrl] = useState(entry?.imageUrl ?? "");
@@ -573,8 +647,31 @@ function EntryForm({
       : "",
   );
   const [preview, setPreview] = useState(false);
+  const rendered = mode === "markdown" ? markdownToHtml(markdown, CHANGELOG_MARKDOWN) : body;
   const busy = pending ?? create.isPending;
+
+  function switchMode(next: "rich" | "markdown") {
+    if (next === mode) return;
+    if (next === "rich" && markdown.trim()) {
+      setBody(markdownToHtml(markdown, CHANGELOG_MARKDOWN));
+      setMarkdown("");
+      setEditorKey((key) => key + 1);
+    }
+    setMode(next);
+  }
   const failure = error === undefined ? create.error : error;
+
+  function writeDraft(postId: number) {
+    draft.mutate([postId], {
+      onSuccess: (result) => {
+        setTitle(result.title);
+        setBody(result.body);
+        setMarkdown("");
+        setMode("rich");
+        setEditorKey((key) => key + 1);
+      },
+    });
+  }
 
   function submit(e: FormEvent) {
     e.preventDefault();
@@ -584,7 +681,7 @@ function EntryForm({
         ? { publishAt: Math.floor(new Date(schedule).getTime() / 1000) }
         : {}),
       title: title.trim(),
-      body,
+      ...(mode === "markdown" ? { markdown } : { body }),
       postId: linked?.id ?? null,
       imageUrl,
       contributorIds: contributors.map((person) => person.id),
@@ -597,6 +694,7 @@ function EntryForm({
       onSuccess: (created) => {
         setTitle("");
         setBody("");
+        setMarkdown("");
         navigate(`/changelog/${created.id}`);
       },
     });
@@ -619,7 +717,7 @@ function EntryForm({
             <h2 className="text-lg font-semibold tracking-tight">{title || "Untitled update"}</h2>
             {linked && <PostLink id={linked.id} title={linked.title} />}
             <div className="changelog-body">
-              <RichText html={body} />
+              <RichText html={rendered} />
             </div>
             {contributors.length > 0 && (
               <p className="text-[12px] text-muted">
@@ -628,15 +726,23 @@ function EntryForm({
             )}
           </div>
         ) : (
-          <Editor
-            value={body}
-            onChange={setBody}
-            placeholder="What changed?  Type / for New, Fixed, Removed…  # to link a suggestion"
-            maxLength={LIMITS.body}
-            mentions
-            headings
-            sections
-          />
+          <>
+            <ModeSwitch mode={mode} onChange={switchMode} />
+            {mode === "markdown" ? (
+              <MarkdownField value={markdown} onChange={setMarkdown} html={rendered} />
+            ) : (
+              <Editor
+                key={editorKey}
+                value={body}
+                onChange={setBody}
+                placeholder="What changed?  Type / for New, Fixed, Removed…  # to link a suggestion"
+                maxLength={LIMITS.body}
+                mentions
+                headings
+                sections
+              />
+            )}
+          </>
         )}
         <ContributorFields people={contributors} onChange={setContributors} />
         <BannerField value={imageUrl} onChange={setImageUrl} />
@@ -651,6 +757,19 @@ function EntryForm({
           onToggle={() => setPicking((open) => !open)}
           onClose={() => setPicking(false)}
         />
+        {me?.aiEnabled && linked && (
+          <div className="flex flex-col gap-1.5">
+            <button
+              type="button"
+              className="btn-ghost h-8 w-fit"
+              disabled={draft.isPending}
+              onClick={() => writeDraft(linked.id)}
+            >
+              {draft.isPending ? "Drafting…" : "Draft from linked feedback with AI"}
+            </button>
+            <ErrorText error={draft.error} />
+          </div>
+        )}
         <div className="flex flex-col gap-2 border-t pt-3">
           <div className="flex flex-col gap-1.5">
             <span className="text-[11px] text-muted">Publication</span>

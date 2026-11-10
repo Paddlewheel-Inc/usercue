@@ -9,11 +9,13 @@ import {
   changelogSectionLabel,
   isEmptyHtml,
   LIMITS,
+  markdownToHtml,
   resolveChangelogPublication,
   sanitizeHtml,
 } from "@usercue/shared";
 import { Hono } from "hono";
 import * as v from "valibot";
+import { announceChangelog } from "../announce";
 import { db } from "../db";
 import { notifyMentions } from "../mentions";
 import { type AppEnv, rateLimit, requireTeam, requireUser } from "../middleware";
@@ -58,6 +60,7 @@ const entryBody = v.object({
   ...publicationFields,
   title: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(LIMITS.title)),
   body: v.optional(v.pipe(v.string(), v.maxLength(LIMITS.body)), ""),
+  markdown: v.optional(v.pipe(v.string(), v.maxLength(LIMITS.body))),
   postId: v.optional(postId),
   imageUrl: v.optional(imageUrl, ""),
   contributorIds: v.optional(contributorIds, []),
@@ -67,6 +70,7 @@ const entryPatch = v.object({
   ...publicationFields,
   title: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(LIMITS.title))),
   body: v.optional(v.pipe(v.string(), v.maxLength(LIMITS.body))),
+  markdown: v.optional(v.pipe(v.string(), v.maxLength(LIMITS.body))),
   postId: v.optional(postId),
   imageUrl: v.optional(imageUrl),
   contributorIds: v.optional(contributorIds),
@@ -84,6 +88,7 @@ interface EntryRow {
   id: number;
   title: string;
   body: string;
+  body_markdown: string;
   author_id: number | null;
   author_name: string;
   author_avatar: string | null;
@@ -156,7 +161,7 @@ interface PersonRow {
 }
 
 const ENTRY_SELECT = `
-  SELECT e.id, e.title, e.body, e.author_id, e.author_name, e.post_id, e.image_url,
+  SELECT e.id, e.title, e.body, e.body_markdown, e.author_id, e.author_name, e.post_id, e.image_url,
          e.created_at, e.updated_at, e.published_at,
          u.avatar_url AS author_avatar,
          r.name AS author_role_name,
@@ -180,12 +185,12 @@ const listStaffEntries = db.query<EntryRow>(
 );
 const findEntry = db.query<EntryRow>(`${ENTRY_SELECT} WHERE e.id = ?`);
 const insertEntry = db.query<{ id: number }>(
-  `INSERT INTO changelog_entries (title, body, author_id, author_name, post_id, image_url, published_at)
-   VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+  `INSERT INTO changelog_entries (title, body, body_markdown, author_id, author_name, post_id, image_url, published_at)
+   VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
 );
 const updateEntry = db.query(
   `UPDATE changelog_entries
-   SET title = ?, body = ?, post_id = ?, image_url = ?, published_at = ?,
+   SET title = ?, body = ?, body_markdown = ?, post_id = ?, image_url = ?, published_at = ?,
        updated_at = EXTRACT(EPOCH FROM NOW())::BIGINT
    WHERE id = ?`,
 );
@@ -284,6 +289,17 @@ function cleanBody(html: string) {
   return isEmptyHtml(clean) ? "" : clean;
 }
 
+function entryContent(input: { body?: string; markdown?: string }) {
+  if (input.markdown !== undefined) {
+    return {
+      html: cleanBody(markdownToHtml(input.markdown, { headings: true, sections: true })),
+      markdown: input.markdown,
+    };
+  }
+  if (input.body === undefined) return undefined;
+  return { html: cleanBody(input.body), markdown: "" };
+}
+
 function packReactions(
   rows: ReactionRow[],
   userId: number | null,
@@ -356,6 +372,7 @@ function serializeEntry(
     id: row.id,
     title: row.title,
     body: entryBodyHtml(row.body, sections),
+    markdown: row.body_markdown,
     authorName: row.author_name,
     authorAvatar: row.author_avatar || null,
     authorRole: roleBadge(row.author_role_name, row.author_role_icon, row.author_role_perms),
@@ -551,7 +568,8 @@ export const changelog = new Hono<AppEnv>()
     const user = c.get("user");
     if (!user) return c.json({ error: "Unauthorized" }, 401);
     const input = c.req.valid("json");
-    const { title, body, postId, imageUrl: banner, contributorIds: credits } = input;
+    const { title, postId, imageUrl: banner, contributorIds: credits } = input;
+    const content = entryContent(input) ?? { html: "", markdown: "" };
     const now = Math.floor(Date.now() / 1000);
     let publishedAt: number | null;
     try {
@@ -570,7 +588,8 @@ export const changelog = new Hono<AppEnv>()
     const created = await db.transaction(async () => {
       const row = await insertEntry.get(
         title,
-        cleanBody(body),
+        content.html,
+        content.markdown,
         user.id,
         user.name,
         linked,
@@ -585,6 +604,7 @@ export const changelog = new Hono<AppEnv>()
     const flags = await changelogFlags();
     const entry = await loadEntry(created.id, user.id, flags.reactions, flags.comments);
     if (!entry) return c.json({ error: "Could not save that update." }, 500);
+    void announceChangelog(publicOrigin(c));
     return c.json(entry, 201);
   })
 
@@ -625,6 +645,7 @@ export const changelog = new Hono<AppEnv>()
       if (
         patch.title === undefined &&
         patch.body === undefined &&
+        patch.markdown === undefined &&
         patch.postId === undefined &&
         patch.imageUrl === undefined &&
         patch.contributorIds === undefined &&
@@ -656,15 +677,26 @@ export const changelog = new Hono<AppEnv>()
       const title = patch.title ?? current.title;
       const banner = patch.imageUrl === undefined ? current.image_url : patch.imageUrl;
       const legacy = await sectionsFor.all(id);
-      const body =
-        patch.body === undefined ? entryBodyHtml(current.body, legacy) : cleanBody(patch.body);
+      const content = entryContent(patch) ?? {
+        html: entryBodyHtml(current.body, legacy),
+        markdown: current.body_markdown,
+      };
       await db.transaction(async () => {
-        await updateEntry.run(title, body, linked, banner, publishedAt, id);
+        await updateEntry.run(
+          title,
+          content.html,
+          content.markdown,
+          linked,
+          banner,
+          publishedAt,
+          id,
+        );
         await writeExtras(id, people);
       });
       const flags = await changelogFlags();
       const entry = await loadEntry(id, c.get("user")?.id ?? null, flags.reactions, flags.comments);
       if (!entry) return c.json({ error: "Not found" }, 404);
+      void announceChangelog(publicOrigin(c));
       return c.json(entry);
     },
   )

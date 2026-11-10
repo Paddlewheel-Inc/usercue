@@ -1,5 +1,6 @@
 import { LIMITS, type Status, tagColorHex } from "@usercue/shared";
 import { type FormEvent, useEffect, useRef, useState } from "react";
+import { Link, useLocation } from "wouter";
 import { useCommentAnchor } from "../lib/anchor";
 import type { Comment } from "../lib/api";
 import { getSavedName, saveName, timeAgo } from "../lib/format";
@@ -20,8 +21,10 @@ import {
 import { useWorkflow, useWorkflowStatus } from "../lib/workflow";
 import { Editor } from "./Editor";
 import { Check, More, Plus, Trash } from "./icons";
+import { MergePanel } from "./MergeDialog";
 import { OAuthButtons } from "./OAuthButtons";
 import { RichText } from "./RichText";
+import { TriagePanel } from "./TriagePanel";
 import {
   Avatar,
   Empty,
@@ -45,7 +48,15 @@ export function PostDetail({ id, onDeleted }: PostDetailProps) {
   const vote = useVote();
   const update = useUpdatePost(id);
   const remove = useDeletePost(id);
+  const [location, navigate] = useLocation();
+  const [merging, setMerging] = useState(false);
   useCommentAnchor(Boolean(post));
+
+  const moved = post !== undefined && post.id !== id;
+  useEffect(() => {
+    if (moved && post)
+      navigate(location.replace(new RegExp(`/${id}$`), `/${post.id}`), { replace: true });
+  }, [moved, post, id, location, navigate]);
 
   if (isLoading) return null;
   if (!post) return <Empty title="Post not found" />;
@@ -89,6 +100,15 @@ export function PostDetail({ id, onDeleted }: PostDetailProps) {
           </div>
         )}
 
+        {post.shippedIn && (
+          <Link
+            href={`/changelog/${post.shippedIn.id}`}
+            className="chip w-fit text-accent-text hover:bg-accent-soft"
+          >
+            Shipped in {post.shippedIn.title}
+          </Link>
+        )}
+
         <PostActions
           postId={post.id}
           status={post.status}
@@ -99,6 +119,7 @@ export function PostDetail({ id, onDeleted }: PostDetailProps) {
           onStatus={(status) => update.mutate({ status })}
           onBoard={(board) => update.mutate({ board })}
           onAssign={(assigneeId) => update.mutate({ assigneeId })}
+          onMerge={() => setMerging(true)}
           onDelete={() => {
             if (confirm("Delete this post and all its comments?")) {
               remove.mutate(undefined, { onSuccess: onDeleted });
@@ -106,9 +127,25 @@ export function PostDetail({ id, onDeleted }: PostDetailProps) {
           }}
         />
 
+        {merging && (
+          <MergePanel
+            postId={post.id}
+            onClose={() => setMerging(false)}
+            onMerged={(targetId) =>
+              navigate(
+                location.startsWith("/admin")
+                  ? `/admin/requests/${targetId}${window.location.search}`
+                  : `/post/${targetId}`,
+              )
+            }
+          />
+        )}
+
         <div className="md:hidden">
           <StatusRoad current={post.status} />
         </div>
+
+        {canTriage && <TriagePanel post={post} />}
 
         <ActivityLog history={post.history ?? []} />
 
@@ -321,6 +358,7 @@ function PostActions({
   onStatus,
   onBoard,
   onAssign,
+  onMerge,
   onDelete,
 }: {
   postId: number;
@@ -332,6 +370,7 @@ function PostActions({
   onStatus: (status: Status) => void;
   onBoard: (board: string) => void;
   onAssign: (assigneeId: number | null) => void;
+  onMerge: () => void;
   onDelete: () => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -433,7 +472,18 @@ function PostActions({
                   </div>
                 </div>
               )}
-              <div className="border-t border-[var(--line)] px-2.5 py-2">
+              <div className="flex flex-col gap-0.5 border-t border-[var(--line)] px-2.5 py-2">
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="flex h-8 w-full items-center gap-2.5 rounded-xl px-2 text-[13px] text-muted transition-colors hover:bg-hover hover:text-fg"
+                  onClick={() => {
+                    setOpen(false);
+                    onMerge();
+                  }}
+                >
+                  Merge into…
+                </button>
                 <button
                   type="button"
                   role="menuitem"

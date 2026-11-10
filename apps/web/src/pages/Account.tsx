@@ -1,7 +1,7 @@
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { Check } from "../components/icons";
 import { ProviderIcon } from "../components/OAuthButtons";
-import { Avatar, ErrorText } from "../components/ui";
+import { Avatar, Checkbox, ErrorText } from "../components/ui";
 import { uploadImage } from "../lib/api";
 import {
   useAuthMethods,
@@ -125,8 +125,42 @@ export function Account() {
           </button>
         </div>
       </form>
+      <EmailPreferences />
       <ConnectedAccounts />
     </div>
+  );
+}
+
+function EmailPreferences() {
+  const { data: me } = useMe();
+  const save = useUpdateProfile();
+  const user = me?.user;
+  if (!user?.email) return null;
+
+  return (
+    <section className="flex flex-col gap-3">
+      <div>
+        <h2 className="text-[13px] font-medium">Email</h2>
+        <p className="mt-1 text-[12px] text-muted">Choose what lands in your inbox.</p>
+      </div>
+      <Checkbox
+        checked={user.emailUpdates}
+        disabled={save.isPending}
+        onChange={(emailUpdates) => save.mutate({ emailUpdates })}
+      >
+        Mentions, and updates when a request I voted on ships
+      </Checkbox>
+      {user.staff && (
+        <Checkbox
+          checked={user.emailDigest}
+          disabled={save.isPending}
+          onChange={(emailDigest) => save.mutate({ emailDigest })}
+        >
+          Weekly digest of new requests and activity
+        </Checkbox>
+      )}
+      <ErrorText error={save.error} />
+    </section>
   );
 }
 

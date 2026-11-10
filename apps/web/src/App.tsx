@@ -10,6 +10,7 @@ import { Admin } from "./pages/Admin";
 import { AuthPage } from "./pages/Auth";
 import { Changelog } from "./pages/Changelog";
 import { Dashboard } from "./pages/Dashboard";
+import { Embed } from "./pages/Embed";
 import { Feedback } from "./pages/Feedback";
 import { JoinPage } from "./pages/Join";
 import { PostPage } from "./pages/Post";
@@ -65,6 +66,7 @@ export function App() {
 
   return (
     <Switch>
+      <Route path="/embed/:kind">{(params) => <Embed kind={params.kind} />}</Route>
       <Route path="/login">
         {me.user?.staff ? (
           <Redirect to="/admin" />

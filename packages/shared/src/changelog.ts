@@ -1,3 +1,15 @@
+export const CHANGELOG_SECTIONS = ["New", "Changed", "Fixed", "Removed"] as const;
+export type ChangelogSection = (typeof CHANGELOG_SECTIONS)[number];
+
+export function changelogSectionLabel(value: string): ChangelogSection | null {
+  const query = value.trim().toLowerCase();
+  return CHANGELOG_SECTIONS.find((label) => label.toLowerCase() === query) ?? null;
+}
+
+export function changelogSectionChip(label: ChangelogSection): string {
+  return `<span data-section="${label}" contenteditable="false">${label}</span>`;
+}
+
 export const CHANGELOG_PUBLICATION_STATUSES = ["draft", "scheduled", "published"] as const;
 export type ChangelogPublicationStatus = (typeof CHANGELOG_PUBLICATION_STATUSES)[number];
 

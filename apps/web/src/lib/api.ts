@@ -2,11 +2,15 @@ import type { AppType } from "@usercue/server";
 import type { Permission } from "@usercue/shared";
 import type { InferResponseType } from "hono/client";
 import { hc } from "hono/client";
+import { visitorHeaders } from "./visitor";
 
-export const api = hc<AppType>("/").api;
+export const api = hc<AppType>("/", { headers: visitorHeaders }).api;
 
 export type Post = InferResponseType<typeof api.posts.$get, 200>[number];
 export type PostDetail = InferResponseType<(typeof api.posts)[":id"]["$get"], 200>;
+export type Triage = InferResponseType<(typeof api.posts)[":id"]["triage"]["$get"], 200>;
+export type SavedView = InferResponseType<typeof api.views.$get, 200>[number];
+export type Webhook = InferResponseType<typeof api.integrations.webhooks.$get, 200>[number];
 export type Comment = PostDetail["comments"][number];
 export type ChangelogList = InferResponseType<typeof api.changelog.$get, 200>;
 export type ChangelogEntry = ChangelogList["entries"][number];

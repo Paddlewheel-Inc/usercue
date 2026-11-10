@@ -1,20 +1,38 @@
 import { vValidator } from "@hono/valibot-validator";
-import { isEmptyHtml, LIMITS, SORTS, STATUSES, type Status, sanitizeHtml } from "@usercue/shared";
+import {
+  isEmptyHtml,
+  LIMITS,
+  PRIORITY_LEVELS,
+  SORTS,
+  STAFF_SORTS,
+  STATUSES,
+  type Status,
+  sanitizeHtml,
+  stripHtml,
+  VOTE_LIMIT_CODE,
+} from "@usercue/shared";
 import { Hono } from "hono";
 import * as v from "valibot";
+import { recordAudit } from "../audit";
 import { type CommentRow, db, type PostRow } from "../db";
 import { notifyMentions } from "../mentions";
+import { redirectTarget } from "../merge";
 import { type AppEnv, authenticateApiKey, rateLimit, requirePermission } from "../middleware";
 import { notifyComment, notifyNewPost, notifyStatusChange } from "../notify";
 import { publicOrigin } from "../oauth";
 import { hasPermission, parsePermissions } from "../roles";
+import { announceShipped } from "../shipping";
+import { hasVotesLeft } from "../voting";
+import { emitWebhook, webhookPost } from "../webhooks";
 import { findWorkflowStatus, listWorkflow } from "../workflow";
 import {
   assignmentMode,
+  changelogFlags,
   customerTagMode,
   guestsAllowed,
   listAssignableStaff,
   pickNextAssignee,
+  triageEnabledFor,
 } from "../workspace";
 
 const text = (max: number) => v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(max));
@@ -27,6 +45,9 @@ const listQuery = v.object({
   status: v.optional(v.pipe(v.string(), v.minLength(1), v.maxLength(80))),
   sort: v.optional(v.picklist(SORTS), "top"),
   q: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(100))),
+  tag: v.optional(numberParam(1, Number.MAX_SAFE_INTEGER)),
+  assignee: v.optional(v.union([v.literal("none"), numberParam(1, Number.MAX_SAFE_INTEGER)])),
+  minVotes: v.optional(numberParam(0, 1_000_000), "0"),
   limit: v.optional(numberParam(1, 100), "50"),
   offset: v.optional(numberParam(0, 100_000), "0"),
 });
@@ -46,6 +67,8 @@ const updatePost = v.object({
   body: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(LIMITS.body))),
   assigneeId: v.optional(v.nullable(v.pipe(v.number(), v.integer(), v.minValue(1)))),
   tagIds: v.optional(v.array(v.pipe(v.number(), v.integer(), v.minValue(1)))),
+  impact: v.optional(v.nullable(v.picklist(PRIORITY_LEVELS))),
+  effort: v.optional(v.nullable(v.picklist(PRIORITY_LEVELS))),
 });
 
 const createComment = v.object({
@@ -101,7 +124,14 @@ const listPosts = db.query<PostListRow>(`
     AND ($status::text IS NULL OR p.status = $status)
     AND ($category::text IS NULL OR p.status IN (SELECT id FROM workflow_statuses WHERE category = $category))
     AND ($q::text IS NULL OR p.title LIKE $q ESCAPE '\\' OR p.body LIKE $q ESCAPE '\\')
-  ORDER BY CASE WHEN $sort::text = 'top' THEN p.vote_count END DESC, p.created_at DESC, p.id DESC
+    AND ($tag::int IS NULL OR EXISTS (SELECT 1 FROM post_tags pt WHERE pt.post_id = p.id AND pt.tag_id = $tag::int))
+    AND ($assignee::int IS NULL OR p.assignee_id = $assignee::int)
+    AND ($unassigned::int = 0 OR p.assignee_id IS NULL)
+    AND p.vote_count >= $minVotes::int
+  ORDER BY
+    CASE WHEN $sort::text = 'top' THEN p.vote_count END DESC,
+    CASE WHEN $sort::text = 'priority' THEN (p.vote_count + 1)::float * p.impact / p.effort END DESC NULLS LAST,
+    p.created_at DESC, p.id DESC
   LIMIT $limit::int OFFSET $offset::int`);
 
 const getPost = db.query<PostListRow>(`
@@ -139,6 +169,16 @@ const findComment = db.query<{
   post_id: number;
   parent_id: number | null;
 }>("SELECT id, post_id, parent_id FROM comments WHERE id = ?");
+
+const findShippedEntry = db.query<{ id: number; title: string; published_at: number }>(
+  `SELECT id, title, published_at
+   FROM changelog_entries
+   WHERE post_id = ?
+     AND published_at IS NOT NULL
+     AND published_at <= EXTRACT(EPOCH FROM NOW())::BIGINT
+   ORDER BY published_at DESC, id DESC
+   LIMIT 1`,
+);
 
 const boardBySlug = db.query<{ id: number }>("SELECT id FROM boards WHERE slug = ?");
 const postExists = db.query<{ id: number }>("SELECT id FROM posts WHERE id = ?");
@@ -358,10 +398,10 @@ const escapeLike = (s: string) => `%${s.replace(/[\\%_]/g, "\\$&")}%`;
 
 async function applyUpdate(
   id: number,
-  patch: Pick<v.InferOutput<typeof updatePost>, "status" | "title" | "body">,
+  patch: Pick<v.InferOutput<typeof updatePost>, "status" | "title" | "body" | "impact" | "effort">,
 ) {
   const sets: string[] = [];
-  const values: Record<string, string | number> = { id };
+  const values: Record<string, string | number | null> = { id };
   for (const [key, value] of Object.entries(patch)) {
     if (value === undefined) continue;
     sets.push(`${key} = $${key}`);
@@ -372,7 +412,20 @@ async function applyUpdate(
 
 export const posts = new Hono<AppEnv>()
   .get("/", vValidator("query", listQuery), async (c) => {
-    const { board, status, category, sort, q, limit, offset } = c.req.valid("query");
+    const {
+      board,
+      status,
+      category,
+      sort: requestedSort,
+      q,
+      tag,
+      assignee,
+      minVotes,
+      limit,
+      offset,
+    } = c.req.valid("query");
+    const staff = Boolean(c.get("user")?.staff);
+    const sort = STAFF_SORTS.includes(requestedSort) && !staff ? "top" : requestedSort;
     if (status && !(await findWorkflowStatus.get(status))) {
       return c.json({ error: "Unknown workflow status" }, 400);
     }
@@ -382,6 +435,10 @@ export const posts = new Hono<AppEnv>()
       status: status ?? null,
       category: category ?? null,
       q: q ? escapeLike(q) : null,
+      tag: tag ?? null,
+      assignee: typeof assignee === "number" ? assignee : null,
+      unassigned: assignee === "none" ? 1 : 0,
+      minVotes,
       sort,
       limit,
       offset,
@@ -444,25 +501,45 @@ export const posts = new Hono<AppEnv>()
       voter: c.get("visitorId"),
     });
     if (!post) return c.json({ error: "Could not create post" }, 500);
-    void notifyNewPost(publicOrigin(c), serialize(post));
+    const origin = publicOrigin(c);
+    void notifyNewPost(origin, serialize(post));
+    void emitWebhook("post.created", webhookPost(origin, serialize(post)));
     return c.json(serialize(post), 201);
   })
 
   .get("/:id", vValidator("param", idParam), async (c) => {
-    const { id } = c.req.valid("param");
+    const requested = c.req.valid("param").id;
+    const id = (await redirectTarget(requested)) ?? requested;
     const post = await getPost.get({ id, voter: c.get("visitorId") });
     if (!post) return c.json({ error: "Not found" }, 404);
 
     const comments = (await listComments.all(id)).map(serializeComment);
     const history = (await listStatusChanges.all(id)).map(serializeChange);
-    return c.json({ ...serialize(post), comments, history });
+    const entry = (await changelogFlags()).enabled ? await findShippedEntry.get(id) : undefined;
+    const shippedIn = entry
+      ? { id: entry.id, title: entry.title, publishedAt: entry.published_at }
+      : null;
+    return c.json({ ...serialize(post), comments, history, shippedIn });
   })
 
   .post("/:id/vote", rateLimit(60, 60), vValidator("param", idParam), async (c) => {
     const { id } = c.req.valid("param");
     if (!(await postExists.get(id))) return c.json({ error: "Not found" }, 404);
 
-    const { voteCount } = await toggleVote(id, c.get("visitorId"), c.get("user")?.id ?? null);
+    const voterId = c.get("visitorId");
+    const userId = c.get("user")?.id ?? null;
+    const alreadyVoted = ((await hasVote.get(id, voterId))?.n ?? 0) > 0;
+    if (!alreadyVoted && !(await hasVotesLeft(voterId, userId))) {
+      return c.json(
+        {
+          error: "You are out of votes. Remove one or wait for a suggestion to ship.",
+          code: VOTE_LIMIT_CODE,
+        },
+        409,
+      );
+    }
+
+    const { voteCount } = await toggleVote(id, voterId, userId);
     const voted = await hasVote.get(id, c.get("visitorId"));
     return c.json({ voteCount, voted: (voted?.n ?? 0) > 0 });
   })
@@ -541,6 +618,15 @@ export const posts = new Hono<AppEnv>()
           },
           serializeComment(row),
         );
+        void emitWebhook("comment.created", {
+          id: row.id,
+          postId: id,
+          postTitle: meta.title,
+          authorName: author,
+          isTeam: Boolean(team?.staff),
+          body: stripHtml(clean),
+          url: `${origin}/post/${id}#comment-${row.id}`,
+        });
         void notifyMentions({
           html: clean,
           origin,
@@ -600,6 +686,11 @@ export const posts = new Hono<AppEnv>()
         }
       }
 
+      const scoring = patch.impact !== undefined || patch.effort !== undefined;
+      if (scoring && !(await triageEnabledFor(id))) {
+        return c.json({ error: "Priority scoring is turned off for this board." }, 400);
+      }
+
       let boardId: number | null = null;
       if (patch.board !== undefined) {
         const target = await boardBySlug.get(patch.board);
@@ -626,6 +717,8 @@ export const posts = new Hono<AppEnv>()
           status: patch.status,
           title: patch.title,
           body: patch.body === undefined ? undefined : sanitizeHtml(patch.body),
+          impact: patch.impact,
+          effort: patch.effort,
         });
         if (patch.status && patch.status !== status.status) {
           await insertStatusChange.run(id, patch.status, actor?.id ?? null, actor?.name ?? "Team");
@@ -652,13 +745,24 @@ export const posts = new Hono<AppEnv>()
       const post = await getPost.get({ id, voter: c.get("visitorId") });
       if (!post) return c.json({ error: "Not found" }, 404);
       if (patch.status && patch.status !== previous.status) {
-        void notifyStatusChange(publicOrigin(c), serialize(post), actor?.name ?? "Team");
+        const origin = publicOrigin(c);
+        const summary = serialize(post);
+        void notifyStatusChange(origin, summary, actor?.name ?? "Team");
+        void emitWebhook("post.status_changed", {
+          ...webhookPost(origin, summary),
+          previousStatus: previous.status,
+          changedBy: actor?.name ?? "Team",
+        });
+        void announceShipped(id, origin);
       }
       return c.json(serialize(post));
     },
   )
 
   .delete("/:id", requirePermission("manage_posts"), vValidator("param", idParam), async (c) => {
-    await removePost.run(c.req.valid("param").id);
+    const { id } = c.req.valid("param");
+    const meta = await findPostMeta.get(id);
+    await removePost.run(id);
+    if (meta) await recordAudit(c, "post.deleted", `Deleted post “${meta.title}”`);
     return c.json({ ok: true });
   });
