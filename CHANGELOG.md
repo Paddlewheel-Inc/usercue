@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [1.2.0]
+
 - Suggest similar posts while someone writes a new one, and let staff merge duplicates. Votes and comments move to the kept post, and the old link redirects.
 - Add impact and effort scoring, internal notes, and priority sorting for staff. Triage tools can be turned off in settings or limited to certain boards.
 - Filter requests by tag, assignee, and minimum votes, and save views from the staff workspace.
