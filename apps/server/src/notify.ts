@@ -96,6 +96,14 @@ export function isTeamsWebhook(url: string): boolean {
   return false;
 }
 
+export function isSlackWebhook(url: string): boolean {
+  return /^https:\/\/hooks\.slack\.com\/(?:services|workflows|triggers)\/[\w/-]+$/.test(url.trim());
+}
+
+export async function slackConfigured(): Promise<boolean> {
+  return Boolean((await getWorkspace()).slack_webhook_cipher);
+}
+
 export async function discordConfigured(): Promise<boolean> {
   return Boolean((await getWorkspace()).discord_webhook_cipher);
 }
@@ -250,8 +258,67 @@ async function postTeams(origin: string, post: PostInfo, activity: string): Prom
   } catch {}
 }
 
+async function slackWebhookUrl(): Promise<string | null> {
+  const workspace = await getWorkspace();
+  if (workspace.slack_enabled !== 1 || !workspace.slack_webhook_cipher) return null;
+  try {
+    return decryptSecret(workspace.slack_webhook_cipher).trim();
+  } catch {
+    return null;
+  }
+}
+
+function escapeSlack(value: string): string {
+  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+async function slackMessage(origin: string, post: PostInfo, activity: string) {
+  const excerpt = stripHtml(post.body).slice(0, 300);
+  const votes = post.voteCount ?? 0;
+  const blocks: Record<string, unknown>[] = [
+    {
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text: `*<${origin}/post/${post.id}|${escapeSlack(post.title)}>*\n${escapeSlack(activity)}`,
+      },
+    },
+  ];
+  if (excerpt) {
+    blocks.push({ type: "section", text: { type: "mrkdwn", text: escapeSlack(excerpt) } });
+  }
+  blocks.push({
+    type: "context",
+    elements: [
+      {
+        type: "mrkdwn",
+        text: `${escapeSlack(post.boardName)} · ${escapeSlack(await workflowName(post.status))} · ${votes} ${votes === 1 ? "vote" : "votes"}`,
+      },
+    ],
+  });
+  return { text: `${activity}: ${post.title}`, blocks };
+}
+
+async function postSlack(origin: string, post: PostInfo, activity: string): Promise<void> {
+  const url = await slackWebhookUrl();
+  if (!url || !isSlackWebhook(url)) return;
+  try {
+    await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(await slackMessage(origin, post, activity)),
+      redirect: "error",
+      signal: AbortSignal.timeout(8000),
+    });
+  } catch {}
+}
+
 export async function notifyNewPost(origin: string, post: PostInfo): Promise<void> {
-  await Promise.all([syncPostMessage(origin, post), postTeams(origin, post, "New post")]);
+  await Promise.all([
+    syncPostMessage(origin, post),
+    postTeams(origin, post, "New post"),
+    postSlack(origin, post, "New post"),
+  ]);
 }
 
 export async function notifyStatusChange(
@@ -260,7 +327,11 @@ export async function notifyStatusChange(
   actorName: string,
 ): Promise<void> {
   const activity = `${actorName} moved this to ${await workflowName(post.status)}`;
-  await Promise.all([syncPostMessage(origin, post), postTeams(origin, post, activity)]);
+  await Promise.all([
+    syncPostMessage(origin, post),
+    postTeams(origin, post, activity),
+    postSlack(origin, post, activity),
+  ]);
 }
 
 export async function notifyComment(
@@ -269,5 +340,9 @@ export async function notifyComment(
   comment: { authorName: string },
 ): Promise<void> {
   const activity = `${comment.authorName} commented`;
-  await Promise.all([syncPostMessage(origin, post), postTeams(origin, post, activity)]);
+  await Promise.all([
+    syncPostMessage(origin, post),
+    postTeams(origin, post, activity),
+    postSlack(origin, post, activity),
+  ]);
 }

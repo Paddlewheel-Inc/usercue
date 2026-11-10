@@ -2,8 +2,10 @@ import { LIMITS, tagColorHex } from "@usercue/shared";
 import { type FormEvent, useState } from "react";
 import { getSavedName, saveName } from "../lib/format";
 import { useAuthMethods, useCreatePost, useMe, useTags } from "../lib/queries";
+import { isEmbedded } from "../lib/visitor";
 import { Editor } from "./Editor";
 import { OAuthButtons } from "./OAuthButtons";
+import { SimilarPosts } from "./SimilarPosts";
 import { ErrorText } from "./ui";
 
 export function PostForm({ board, defaultOpen = false }: { board: string; defaultOpen?: boolean }) {
@@ -24,6 +26,7 @@ export function PostForm({ board, defaultOpen = false }: { board: string; defaul
   const guest = !user && !identity;
   const allowGuest = me?.allowGuestFeedback !== false;
   const mustSignIn = guest && !allowGuest;
+  const canSignInHere = Boolean(methods?.providers.length) && !isEmbedded();
   const suspended = Boolean(user?.suspended);
   const needsTag = requireTags && tagIds.length === 0;
   const canPost = !mustSignIn && !suspended && !needsTag;
@@ -65,6 +68,7 @@ export function PostForm({ board, defaultOpen = false }: { board: string; defaul
         onChange={(e) => setTitle(e.target.value)}
         required
       />
+      {open && <SimilarPosts text={title} />}
       {open && (
         <div className="flex animate-rise flex-col gap-3 px-4 pb-3">
           <Editor value={body} onChange={setBody} maxLength={LIMITS.body} mentions />
@@ -99,7 +103,7 @@ export function PostForm({ board, defaultOpen = false }: { board: string; defaul
               </div>
             </div>
           )}
-          {guest && Boolean(methods?.providers.length) && (
+          {guest && canSignInHere && (
             <div className="flex flex-col gap-2 border-t pt-3">
               <OAuthButtons next="board" />
               {allowGuest && (
@@ -107,9 +111,10 @@ export function PostForm({ board, defaultOpen = false }: { board: string; defaul
               )}
             </div>
           )}
-          {mustSignIn && !methods?.providers.length && (
+          {mustSignIn && !canSignInHere && (
             <p className="border-t pt-3 text-[12px] text-muted">
               Sign in is required to share feedback.
+              {isEmbedded() && " Open the full board to sign in."}
             </p>
           )}
           <div className="flex items-center gap-2 border-t pt-3">

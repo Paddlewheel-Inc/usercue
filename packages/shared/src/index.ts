@@ -3,6 +3,12 @@ export type BuiltinStatus = (typeof STATUSES)[number];
 export type Status = string;
 export * from "./changelog";
 export * from "./entitlements";
+export * from "./importing";
+export * from "./markdown";
+export * from "./priority";
+export * from "./similar";
+export * from "./views";
+export * from "./webhooks";
 export * from "./workflow";
 
 export const STATUS_LABELS: Record<Status, string> = {
@@ -13,8 +19,12 @@ export const STATUS_LABELS: Record<Status, string> = {
   closed: "Closed",
 };
 
-export const SORTS = ["top", "new"] as const;
+export const SORTS = ["top", "new", "priority"] as const;
 export type Sort = (typeof SORTS)[number];
+export const STAFF_SORTS: readonly Sort[] = ["priority"];
+
+export const VOTE_LIMIT_MAX = 100;
+export const VOTE_LIMIT_CODE = "vote_limit";
 
 export const ASSIGNMENT_MODES = ["off", "manual", "auto"] as const;
 export type AssignmentMode = (typeof ASSIGNMENT_MODES)[number];
@@ -91,22 +101,10 @@ export const CHANGELOG_REACTIONS: { id: ChangelogReaction; label: string; emoji:
   { id: "rocket", label: "Ship", emoji: "🚀" },
 ];
 
-export const CHANGELOG_SECTIONS = ["New", "Changed", "Fixed", "Removed"] as const;
-export type ChangelogSection = (typeof CHANGELOG_SECTIONS)[number];
-
 export const CHANGELOG_LIMITS = {
   sectionLabel: 40,
   contributors: 20,
 } as const;
-
-export function changelogSectionLabel(value: string): ChangelogSection | null {
-  const query = value.trim().toLowerCase();
-  return CHANGELOG_SECTIONS.find((label) => label.toLowerCase() === query) ?? null;
-}
-
-export function changelogSectionChip(label: ChangelogSection): string {
-  return `<span data-section="${label}" contenteditable="false">${label}</span>`;
-}
 
 export function isHexColor(value: string): boolean {
   return /^#[0-9a-fA-F]{6}$/.test(value.trim());

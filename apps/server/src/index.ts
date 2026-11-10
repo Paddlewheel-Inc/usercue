@@ -4,6 +4,8 @@ import { serveStatic } from "hono/bun";
 import { app } from "./app";
 import { initDb } from "./db";
 import { env } from "./env";
+import { startJobs } from "./jobs";
+import { redirectTarget } from "./merge";
 import { publicOrigin } from "./oauth";
 import { entryMeta, injectMeta, metaTags, ogEntry, ogPost, postMeta, siteMeta } from "./og";
 import { initRoles } from "./roles";
@@ -11,6 +13,7 @@ import { changelogFlags, workspaceBranding } from "./workspace";
 
 await initDb();
 await initRoles();
+startJobs();
 
 app.use("/uploads/*", serveStatic({ root: env.dataDir }));
 
@@ -36,7 +39,10 @@ if (env.production) {
     const base = await shell();
     const id = Number(c.req.param("id"));
     const post = Number.isInteger(id) ? await ogPost.get(id) : null;
-    if (!post) return page(c);
+    if (!post) {
+      const target = Number.isInteger(id) ? await redirectTarget(id) : null;
+      return target ? c.redirect(`/post/${target}`, 301) : page(c);
+    }
     const tags = metaTags(postMeta(publicOrigin(c), post, await workspaceBranding()));
     return c.html(injectMeta(base, tags), 200, { "Cache-Control": "public, max-age=60" });
   });

@@ -19,38 +19,35 @@
 :root {
   color-scheme: light;
 
-  /* A little brand color in the neutrals keeps the whole workspace cohesive. */
-  --bg: color-mix(in oklab, var(--accent) 6%, #f5f4f2);
-  --surface: color-mix(in oklab, var(--accent) 2%, #fffefd);
-  --hover: color-mix(in oklab, var(--accent) 9%, #eeece9);
-  --line: color-mix(in oklab, var(--accent) 10%, #ddd9d5);
+  --bg: #f3efe8;
+  --surface: #fffaf3;
+  --hover: #ebe4d8;
+  --line: #e2d8cc;
 
-  --fg: color-mix(in oklab, var(--accent) 8%, #252322);
-  --muted: color-mix(in oklab, var(--accent) 8%, #625c59);
-  --faint: color-mix(in oklab, var(--accent) 6%, #8c8580);
+  --fg: #2a241d;
+  --muted: #7a7065;
+  --faint: #a89e92;
 
   --accent: #ff2b87;
   --accent-soft: #ffe0ee;
   --accent-text: #d70f68;
   --accent-custom: #ff2b87;
 
-  --shadow:
-    0 1px 2px color-mix(in srgb, var(--fg) 4%, transparent),
-    0 10px 28px -14px color-mix(in srgb, var(--fg) 14%, transparent);
-  --shadow-lg: 0 18px 50px -24px color-mix(in srgb, var(--fg) 22%, transparent);
+  --shadow: 0 1px 2px rgb(42 36 29 / 0.04), 0 10px 28px -14px rgb(42 36 29 / 0.14);
+  --shadow-lg: 0 18px 50px -24px rgb(42 36 29 / 0.22);
 }
 
 [data-theme="dark"] {
   color-scheme: dark;
 
-  --bg: color-mix(in oklab, var(--accent) 5%, #0d0e10);
-  --surface: color-mix(in oklab, var(--accent) 6%, #17181b);
-  --hover: color-mix(in oklab, var(--accent) 9%, #222328);
-  --line: color-mix(in oklab, var(--accent) 12%, #34353b);
+  --bg: #080706;
+  --surface: #121110;
+  --hover: #1c1a18;
+  --line: #2a2724;
 
-  --fg: color-mix(in oklab, var(--accent) 4%, #f3f1ef);
-  --muted: color-mix(in oklab, var(--accent) 7%, #b1aba8);
-  --faint: color-mix(in oklab, var(--accent) 6%, #898381);
+  --fg: #f3eee8;
+  --muted: #9c958c;
+  --faint: #6e6862;
 
   --accent: #ff2b87;
   --accent-soft: rgb(255 43 135 / 0.16);

@@ -1,4 +1,3 @@
-import { type Status } from "@usercue/shared";
 import {
   type FormEvent,
   type ReactNode,
@@ -24,9 +23,11 @@ import { NotificationBell } from "../components/NotificationBell";
 import { PostDetail } from "../components/PostDetail";
 import { PostRow } from "../components/PostRow";
 import { Logo } from "../components/PublicLayout";
+import { RequestFilters } from "../components/RequestFilters";
 import { ThemeToggle } from "../components/ThemeToggle";
 import { Avatar, Empty, RoleBadge } from "../components/ui";
 import { StatusIcon, StatusName } from "../components/WorkflowIcon";
+import { type Filter, filterHref, filterQuery, isNarrowed, parseFilter } from "../lib/adminFilter";
 import {
   can,
   useAuth,
@@ -34,33 +35,15 @@ import {
   useCounts,
   useCreateBoard,
   useDeleteBoard,
+  useDeleteView,
   useMe,
   usePosts,
   useRenameBoard,
+  useSavedViews,
 } from "../lib/queries";
 import { useWorkflow } from "../lib/workflow";
 
-interface Filter {
-  status?: Status;
-  board?: string;
-}
-
-function parseFilter(search: string): Filter {
-  const params = new URLSearchParams(search);
-  const status = params.get("status");
-  return {
-    status: status || undefined,
-    board: params.get("board") ?? undefined,
-  };
-}
-
-function href({ status, board }: Filter, id?: number) {
-  const params = new URLSearchParams();
-  if (status) params.set("status", status);
-  if (board) params.set("board", board);
-  const query = params.toString();
-  return `/admin/requests${id ? `/${id}` : ""}${query ? `?${query}` : ""}`;
-}
+const href = filterHref;
 
 function hueFor(name: string): number {
   return [...name].reduce((h, c) => (h * 31 + c.charCodeAt(0)) % 360, 7);
@@ -131,7 +114,10 @@ function Sidebar({
   const { logout } = useAuth();
   const [, navigate] = useLocation();
   const total = counts ? Object.values(counts).reduce((a, b) => a + b, 0) : undefined;
-  const allActive = !dashboard && !settings && !filter.status;
+  const { data: views = [] } = useSavedViews();
+  const activeQuery = filterQuery(filter);
+  const activeView = views.find((view) => view.query === activeQuery);
+  const allActive = !dashboard && !settings && !filter.status && !activeView && !activeQuery;
 
   useEffect(() => {
     if (!open) return;
@@ -194,6 +180,8 @@ function Sidebar({
           })}
         </Section>
 
+        <ViewsNav views={views} activeId={dashboard || settings ? undefined : activeView?.id} />
+
         <BoardsNav filter={filter} boards={boards} muted={dashboard || settings} />
 
         <Section title="The shop">
@@ -236,6 +224,44 @@ function Sidebar({
         </div>
       </div>
     </aside>
+  );
+}
+
+function ViewsNav({
+  views,
+  activeId,
+}: {
+  views: { id: number; name: string; query: string }[];
+  activeId?: number;
+}) {
+  const remove = useDeleteView();
+  if (views.length === 0) return null;
+
+  return (
+    <Section title="Views">
+      {views.map((view) => (
+        <div key={view.id} className="group relative">
+          <SidebarLink
+            to={`/admin/requests?${view.query}`}
+            active={view.id === activeId}
+            className="pr-8"
+          >
+            <span className="truncate">{view.name}</span>
+          </SidebarLink>
+          <button
+            type="button"
+            aria-label={`Delete ${view.name}`}
+            disabled={remove.isPending}
+            className="absolute top-1/2 right-1.5 inline-flex size-6 -translate-y-1/2 items-center justify-center rounded-full text-faint opacity-0 transition-opacity group-hover:opacity-100 hover:bg-rose-500/10 hover:text-rose-600 focus-visible:opacity-100"
+            onClick={() => {
+              if (confirm(`Delete the ${view.name} view?`)) remove.mutate(view.id);
+            }}
+          >
+            <Trash width={12} height={12} />
+          </button>
+        </div>
+      ))}
+    </Section>
   );
 }
 
@@ -407,19 +433,24 @@ function BoardsNav({
 }
 
 function RequestList({ filter, selected }: { filter: Filter; selected?: number }) {
-  const [search, setSearch] = useState("");
-  const q = useDeferredValue(search.trim());
+  const [, navigate] = useLocation();
+  const q = useDeferredValue(filter.q?.trim() ?? "");
   const { data: posts, isLoading } = usePosts({
     ...filter,
-    sort: "new",
+    sort: filter.sort ?? "new",
     q: q || undefined,
   });
   const { data: counts } = useCounts(filter.board);
-  const shown = filter.status
-    ? counts?.[filter.status]
-    : counts
-      ? Object.values(counts).reduce((a, b) => a + b, 0)
-      : undefined;
+  const total = counts ? Object.values(counts).reduce((a, b) => a + b, 0) : undefined;
+  const shown = isNarrowed(filter)
+    ? posts?.length
+    : filter.status
+      ? counts?.[filter.status]
+      : total;
+
+  function change(patch: Partial<Filter>) {
+    navigate(href({ ...filter, ...patch }, selected), { replace: true });
+  }
 
   return (
     <section
@@ -433,16 +464,17 @@ function RequestList({ filter, selected }: { filter: Filter; selected?: number }
           )}
         </h2>
       </header>
-      <div className="px-4 pb-3">
+      <div className="flex flex-col gap-2 px-4 pb-3">
         <div className="relative">
           <Search className="absolute top-1/2 left-3 -translate-y-1/2 text-faint" />
           <input
             className="input pl-8"
             placeholder="Search requests…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            value={filter.q ?? ""}
+            onChange={(e) => change({ q: e.target.value || undefined })}
           />
         </div>
+        <RequestFilters filter={filter} onChange={change} />
       </div>
       <div className="flex flex-1 flex-col gap-1 overflow-y-auto px-3 pb-4">
         {posts?.map((post, i) => (

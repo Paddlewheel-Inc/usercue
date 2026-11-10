@@ -4,7 +4,7 @@ import { useLocation } from "wouter";
 import { ANCHOR_EVENT } from "../lib/anchor";
 import { timeAgo } from "../lib/format";
 import { useNotifications, useReadNotifications } from "../lib/queries";
-import { Bell } from "./icons";
+import { Bell, Check } from "./icons";
 import { Avatar } from "./ui";
 
 interface Spot {
@@ -137,26 +137,41 @@ export function NotificationBell({ placement = "down" }: { placement?: "down" | 
                       onClick={() => visit(item)}
                       className="flex w-full items-start gap-2.5 rounded-xl px-2.5 py-2 text-left transition-colors hover:bg-hover"
                     >
-                      <Avatar name={item.actorName} src={item.actorAvatar} size="md" />
+                      {item.kind === "shipped" ? (
+                        <span className="inline-flex size-8 shrink-0 items-center justify-center rounded-full bg-accent-soft text-accent-text">
+                          <Check width={14} height={14} />
+                        </span>
+                      ) : (
+                        <Avatar name={item.actorName} src={item.actorAvatar} size="md" />
+                      )}
                       <span className="min-w-0 flex-1">
                         <span className="block text-[13px] leading-5">
-                          <span className="font-medium">{item.actorName}</span>
-                          <span className="text-muted">
-                            {item.kind === "role" && item.roleName
-                              ? " pinged "
-                              : " mentioned you in "}
-                          </span>
-                          {item.kind === "role" && item.roleName && (
+                          {item.kind === "shipped" ? (
                             <>
-                              <span className="rounded-md bg-accent-soft px-1 font-medium text-accent-text">
-                                @{item.roleName}
+                              <span className="font-medium">{item.title}</span>
+                              <span className="text-muted"> is now {item.excerpt}</span>
+                            </>
+                          ) : (
+                            <>
+                              <span className="font-medium">{item.actorName}</span>
+                              <span className="text-muted">
+                                {item.kind === "role" && item.roleName
+                                  ? " pinged "
+                                  : " mentioned you in "}
                               </span>
-                              <span className="text-muted"> in </span>
+                              {item.kind === "role" && item.roleName && (
+                                <>
+                                  <span className="rounded-md bg-accent-soft px-1 font-medium text-accent-text">
+                                    @{item.roleName}
+                                  </span>
+                                  <span className="text-muted"> in </span>
+                                </>
+                              )}
+                              <span className="font-medium">{item.title}</span>
                             </>
                           )}
-                          <span className="font-medium">{item.title}</span>
                         </span>
-                        {item.excerpt && (
+                        {item.kind !== "shipped" && item.excerpt && (
                           <span className="mt-0.5 line-clamp-2 block text-[12px] leading-4 text-muted">
                             {item.excerpt}
                           </span>

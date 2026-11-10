@@ -3,10 +3,13 @@ import {
   type ChangelogSection,
   changelogSectionChip,
   changelogSectionLabel,
+  escapeHtml,
   IMAGE_WIDTH,
+  INLINE_RULES,
   isEmptyHtml,
-  isPostHref,
   LIMITS,
+  MARKDOWN_HINT,
+  markdownToHtml,
   mentionChip,
   roleMentionChip,
   sanitizeHtml,
@@ -69,14 +72,6 @@ function exec(command: string, value?: string) {
   document.execCommand(command, false, value);
 }
 
-function escapeHtml(value: string) {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
-
 function caretText(root: HTMLElement | null) {
   const sel = window.getSelection();
   if (!sel?.rangeCount || !sel.isCollapsed) return null;
@@ -130,108 +125,8 @@ function readShortcode(root: HTMLElement | null) {
   };
 }
 
-function linkHref(value: string) {
-  if (isPostHref(value)) return value;
-  if (/^(?:https?:\/\/|mailto:)\S+$/i.test(value)) return value;
-  if (/^[\w-]+(?:\.[\w-]+)+(?:[/?#]\S*)?$/.test(value)) return `https://${value}`;
-  return null;
-}
-
-function imageSrc(value: string) {
-  return /^(?:https?:\/\/\S+|\/(?:api\/)?uploads\/[\w.-]+)$/i.test(value) ? value : null;
-}
-
-function wrapped(delimiter: string, char: string) {
-  return `${delimiter}([^${char}\\s](?:[^${char}]*[^${char}\\s])?)${delimiter}`;
-}
-
-interface InlineRule {
-  source: string;
-  render: (match: RegExpMatchArray) => string | null;
-}
-
-const INLINE: InlineRule[] = [
-  {
-    source: String.raw`!\[([^\]]*)\]\(([^)\s]+)\)`,
-    render: (m) => {
-      const src = imageSrc(m[2] ?? "");
-      return src ? `<img src="${src}" alt="${m[1] ?? ""}">` : null;
-    },
-  },
-  {
-    source: String.raw`(?<!!)\[([^\]]+)\]\(([^)\s]+)\)`,
-    render: (m) => {
-      const href = linkHref(m[2] ?? "");
-      return href ? `<a href="${href}">${m[1]}</a>` : null;
-    },
-  },
-  { source: wrapped(String.raw`\*\*`, "*"), render: (m) => `<b>${m[1]}</b>` },
-  { source: wrapped("__", "_"), render: (m) => `<u>${m[1]}</u>` },
-  { source: wrapped("==", "="), render: (m) => `<mark>${m[1]}</mark>` },
-  {
-    source: String.raw`(?<![\w*])${wrapped(String.raw`\*`, "*")}(?!\*)`,
-    render: (m) => `<i>${m[1]}</i>`,
-  },
-  { source: String.raw`(?<!\w)${wrapped("_", "_")}(?!\w)`, render: (m) => `<i>${m[1]}</i>` },
-];
-
-const TYPED = INLINE.map((rule) => ({ ...rule, pattern: new RegExp(`(?:${rule.source})$`) }));
-const PASTED = INLINE.map((rule) => ({ ...rule, pattern: new RegExp(rule.source, "g") }));
+const TYPED = INLINE_RULES.map((rule) => ({ ...rule, pattern: new RegExp(`(?:${rule.source})$`) }));
 const TRIGGERS = new Set(["*", "_", "=", ")"]);
-
-function inlineMarkdown(text: string) {
-  const held: string[] = [];
-  let out = escapeHtml(text);
-  for (const rule of PASTED) {
-    out = out.replace(rule.pattern, (...args) => {
-      const html = rule.render(args.slice(0, -2) as RegExpMatchArray);
-      if (!html) return args[0];
-      held.push(html);
-      return `\uE000${held.length - 1}\uE001`;
-    });
-  }
-  return out.replace(/\uE000(\d+)\uE001/g, (_, i) => held[Number(i)] ?? "");
-}
-
-const MARKDOWN_HINT = new RegExp(
-  [
-    String.raw`^\s*(?:[-*+]|\d+[.)])\s`,
-    String.raw`^#{1,3}\s`,
-    ...INLINE.map((rule) => rule.source),
-  ].join("|"),
-  "m",
-);
-
-function markdownToHtml(text: string, headings: boolean) {
-  const lines = text.replace(/\r\n?/g, "\n").replace(/\n+$/, "").split("\n");
-  const out: string[] = [];
-  let list: "ul" | "ol" | null = null;
-  for (const line of lines) {
-    const item = /^\s*(?:([-*+])|\d+[.)])\s+(.*)$/.exec(line);
-    const kind = item ? (item[1] ? "ul" : "ol") : null;
-    if (list && kind !== list) {
-      out.push(`</${list}>`);
-      list = null;
-    }
-    if (item && kind) {
-      if (!list) out.push(`<${kind}>`);
-      list = kind;
-      out.push(`<li>${inlineMarkdown(item[2] ?? "")}</li>`);
-      continue;
-    }
-    const heading = headings ? /^(#{1,3})\s+(.*)$/.exec(line) : null;
-    if (heading) {
-      const tag = heading[1]?.length === 3 ? "h3" : "h2";
-      out.push(`<${tag}>${inlineMarkdown(heading[2] ?? "")}</${tag}>`);
-    } else if (lines.length === 1) {
-      out.push(inlineMarkdown(line));
-    } else {
-      out.push(line.trim() ? `<div>${inlineMarkdown(line)}</div>` : "<div><br></div>");
-    }
-  }
-  if (list) out.push(`</${list}>`);
-  return sanitizeHtml(out.join(""));
-}
 
 const EMOJI_MENU_WIDTH = 224;
 const CARET_KEYS = new Set(["ArrowLeft", "ArrowRight", "Home", "End"]);
@@ -824,7 +719,7 @@ export function Editor({
           const text = e.clipboardData.getData("text/plain");
           if (!MARKDOWN_HINT.test(text)) return;
           e.preventDefault();
-          exec("insertHTML", markdownToHtml(text, headings));
+          exec("insertHTML", markdownToHtml(text, { headings }));
           emit();
         }}
         onFocus={() => void loadEmoji()}

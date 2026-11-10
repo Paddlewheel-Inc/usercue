@@ -49,7 +49,7 @@ Copy `.env.example` if you need to point at another database, turn on secure coo
 
 **Roadmap.** Status is public. Open, planned, in progress, complete, closed. The roadmap is the same work, shown as a path instead of a list.
 
-**Changelog.** Staff write what shipped. Comments and reactions are their own switches. Subscribers can follow the RSS feed. The address for that feed lives in settings.
+**Changelog.** Staff write what shipped. Comments and reactions are their own switches. Write entries in the rich editor or in markdown, where `## New`, `## Changed`, `## Fixed`, and `## Removed` headings become section chips. Subscribers can follow the RSS feed. The address for that feed lives in settings.
 
 **Workspace.** Tags, roles, and assignment live with the team. Automatic assignment hands the next planned suggestion to the next person in line.
 
@@ -57,7 +57,16 @@ Copy `.env.example` if you need to point at another database, turn on secure coo
 
 **Sign-in.** GitHub, Discord, Google, Roblox, and Microsoft. Turn on the ones you actually use.
 
-**Out the door.** New suggestions, status changes, and comments can post to a Discord channel or a Teams webhook.
+**Triage.** Similar posts show up while someone types, so people vote instead of duplicating. Staff can merge duplicates, score impact against effort, keep internal notes, filter by tag or assignee, and save views.
+**Closing the loop.** Voters hear when their request ships. Changelog entries link to the posts they close, and posts show a shipped badge. A weekly digest keeps the team current.
+
+**Out the door.** New suggestions, status changes, and comments can post to Discord, Teams, or Slack. Signed webhooks work with Zapier and Make. See the [API guide](docs/api.md).
+
+**In the door.** Feedback can arrive by email through Resend, from an embeddable widget or inline board, or from an import of Canny, Featurebase, Productboard, or any CSV.
+
+**Optional AI.** Bring any OpenAI-compatible key to summarize long threads, suggest tags, and draft changelog entries. It is off until you add one.
+
+**Control.** Limit votes per person, and review an audit log of who changed what.
 
 ## Built with
 

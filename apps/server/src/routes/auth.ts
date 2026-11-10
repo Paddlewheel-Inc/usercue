@@ -2,6 +2,7 @@ import { vValidator } from "@hono/valibot-validator";
 import { Hono } from "hono";
 import { deleteCookie, getCookie } from "hono/cookie";
 import * as v from "valibot";
+import { aiAvailable } from "../ai";
 import { db } from "../db";
 import {
   type AppEnv,
@@ -19,6 +20,7 @@ import {
   customerTagMode,
   guestsAllowed,
   oauthOnly,
+  triageBoardSlugs,
   workspaceAccent,
   workspaceBranding,
   workspaceLogos,
@@ -44,6 +46,12 @@ const updateProfile = db.query(
      password_hash = CASE WHEN ? <> '' THEN ? ELSE password_hash END,
      avatar_url = CASE WHEN ? = 1 THEN ? ELSE avatar_url END
    WHERE id = ?`,
+);
+const updateEmailPreferences = db.query(
+  `UPDATE users
+   SET email_updates = COALESCE($updates::int, email_updates),
+       email_digest = COALESCE($digest::int, email_digest)
+   WHERE id = $id`,
 );
 const insertBoard = db.query(
   "INSERT INTO boards (slug, name) VALUES (?, ?) ON CONFLICT (slug) DO NOTHING",
@@ -86,6 +94,8 @@ export const auth = new Hono<AppEnv>()
       customerTagsRequired: (await customerTagMode()).required,
       changelogEnabled: (await changelogFlags()).enabled,
       assignmentMode: await assignmentMode(),
+      aiEnabled: user?.staff ? await aiAvailable() : false,
+      triageBoards: user?.staff ? await triageBoardSlugs() : [],
       accent: await workspaceAccent(),
       logoUrl: logos.light,
       logoDarkUrl: logos.dark,
@@ -104,6 +114,8 @@ export const auth = new Hono<AppEnv>()
         password: v.optional(v.pipe(v.string(), v.minLength(8), v.maxLength(200))),
         currentPassword: v.optional(v.pipe(v.string(), v.maxLength(200))),
         avatarUrl: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(200))),
+        emailUpdates: v.optional(v.boolean()),
+        emailDigest: v.optional(v.boolean()),
       }),
     ),
     async (c) => {
@@ -135,10 +147,19 @@ export const auth = new Hono<AppEnv>()
         body.avatarUrl ?? "",
         user.id,
       );
+      if (body.emailUpdates !== undefined || body.emailDigest !== undefined) {
+        await updateEmailPreferences.run({
+          id: user.id,
+          updates: body.emailUpdates === undefined ? null : Number(body.emailUpdates),
+          digest: body.emailDigest === undefined ? null : Number(body.emailDigest),
+        });
+      }
       return c.json({
         ok: true,
         user: toPublicUser({
           ...user,
+          emailUpdates: body.emailUpdates ?? user.emailUpdates,
+          emailDigest: body.emailDigest ?? user.emailDigest,
           name,
           avatarUrl: body.avatarUrl === undefined ? user.avatarUrl : body.avatarUrl || null,
           hasPassword: Boolean(hash) || user.hasPassword,

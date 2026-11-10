@@ -5,6 +5,7 @@ import { Search } from "../components/icons";
 import { PostForm } from "../components/PostForm";
 import { PostRow } from "../components/PostRow";
 import { Empty } from "../components/ui";
+import { VoteBudget } from "../components/VoteBudget";
 import { useBoards, useCounts, usePosts } from "../lib/queries";
 import { useWorkflow } from "../lib/workflow";
 
@@ -22,8 +23,9 @@ export function Feedback() {
   const [search, setSearch] = useState("");
   const q = useDeferredValue(search.trim());
 
-  const compose = new URLSearchParams(useSearch()).has("new");
-  const board = params.board ?? boards[0]?.slug;
+  const query = new URLSearchParams(useSearch());
+  const compose = query.has("new");
+  const board = params.board ?? query.get("board") ?? boards[0]?.slug;
   const { data: counts } = useCounts(board);
   const { data: posts, isLoading } = usePosts({ board, status, sort, q: q || undefined });
 
@@ -96,6 +98,7 @@ export function Feedback() {
             ))}
           </div>
         </div>
+        <VoteBudget />
       </div>
 
       <div className="flex min-w-0 flex-col gap-2">

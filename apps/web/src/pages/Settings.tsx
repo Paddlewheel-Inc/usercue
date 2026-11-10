@@ -1,8 +1,5 @@
 import {
   ACCENTS,
-  ASSIGNMENT_LABELS,
-  ASSIGNMENT_MODES,
-  type AssignmentMode,
   isHexColor,
   PERMISSION_META,
   PERMISSIONS,
@@ -17,6 +14,7 @@ import { type FormEvent, type ReactNode, useEffect, useRef, useState } from "rea
 import { Link, Redirect, useParams } from "wouter";
 import { ArrowUpRight, Check, ChevronDown, Copy, More, Plus, Trash } from "../components/icons";
 import { ProviderIcon } from "../components/OAuthButtons";
+import { SectionHead } from "../components/SectionHead";
 import { Avatar, Checkbox, CopyField, ErrorText, useToast } from "../components/ui";
 import { type ApiKey, uploadImage } from "../lib/api";
 import { dateTimeLabel, longDate, timeAgo } from "../lib/format";
@@ -31,13 +29,10 @@ import {
   useDeleteRole,
   useDeleteTag,
   useDeleteWorkspaceUser,
-  useInviteStaff,
   useMe,
   useProviders,
-  useRemoveStaff,
   useReorderRoles,
   useRevokeApiKey,
-  useRevokeInvite,
   useRoles,
   useSaveBranding,
   useSaveProvider,
@@ -51,6 +46,11 @@ import {
   useWorkspaceUsers,
 } from "../lib/queries";
 import { AdminShell } from "./Admin";
+import { AuditSettings } from "./settings/AuditSettings";
+import { GeneralSettings } from "./settings/GeneralSettings";
+import { IntegrationSettings } from "./settings/IntegrationSettings";
+import { NotificationSettings } from "./settings/NotificationSettings";
+import { StaffSettings } from "./settings/StaffSettings";
 import { WorkflowSettings } from "./WorkflowSettings";
 
 const TABS = [
@@ -58,10 +58,14 @@ const TABS = [
   { id: "workflow", href: "/admin/settings/workflow", label: "Workflow" },
   { id: "branding", href: "/admin/settings/branding", label: "Branding" },
   { id: "tags", href: "/admin/settings/tags", label: "Tags" },
+  { id: "notifications", href: "/admin/settings/notifications", label: "Notifications" },
+  { id: "integrations", href: "/admin/settings/integrations", label: "Integrations" },
+  { id: "api-keys", href: "/admin/settings/api-keys", label: "API keys" },
   { id: "auth", href: "/admin/settings/auth", label: "Authentication" },
+  { id: "team", href: "/admin/settings/team", label: "Team" },
   { id: "users", href: "/admin/settings/users", label: "Users" },
   { id: "roles", href: "/admin/settings/roles", label: "Roles" },
-  { id: "api-keys", href: "/admin/settings/api-keys", label: "API keys" },
+  { id: "audit", href: "/admin/settings/audit", label: "Audit log" },
 ] as const;
 
 type SettingsTab = (typeof TABS)[number]["id"];
@@ -74,11 +78,14 @@ export function Settings() {
     : "general";
 
   const visible = TABS.filter((tab) => {
-    if (tab.id === "general") return can(me, "manage_settings") || can(me, "manage_staff");
-    if (tab.id === "workflow") return can(me, "manage_settings");
+    if (tab.id === "team") return can(me, "manage_staff");
     if (tab.id === "branding") return can(me, "manage_branding");
     if (tab.id === "tags") return can(me, "manage_posts") || can(me, "manage_settings");
-    if (tab.id === "auth") return can(me, "manage_settings");
+    if (
+      ["general", "workflow", "notifications", "integrations", "audit", "auth"].includes(tab.id)
+    ) {
+      return can(me, "manage_settings");
+    }
     if (tab.id === "users") return can(me, "manage_users");
     if (tab.id === "api-keys") return can(me, "dashboard");
     return can(me, "manage_roles");
@@ -134,6 +141,14 @@ export function Settings() {
             <RolesSettings />
           ) : tab === "api-keys" ? (
             <ApiKeysSettings />
+          ) : tab === "notifications" ? (
+            <NotificationSettings />
+          ) : tab === "integrations" ? (
+            <IntegrationSettings />
+          ) : tab === "team" ? (
+            <StaffSettings />
+          ) : tab === "audit" ? (
+            <AuditSettings />
           ) : (
             <GeneralSettings />
           )}
@@ -498,348 +513,6 @@ function ApiKeysSettings() {
   );
 }
 
-function ResendSettings() {
-  const { data } = useSettings();
-  const save = useSaveSettings();
-  const toast = useToast();
-  const [from, setFrom] = useState(data?.resend.from ?? "");
-  const [apiKey, setApiKey] = useState("");
-  const [enabled, setEnabled] = useState(Boolean(data?.resend.enabled));
-
-  useEffect(() => {
-    if (!data) return;
-    setFrom(data.resend.from ?? "");
-    setApiKey("");
-    setEnabled(data.resend.enabled);
-  }, [data]);
-
-  if (!data) return null;
-
-  function submit(e: FormEvent) {
-    e.preventDefault();
-    save.mutate(
-      {
-        resendFrom: from,
-        resendApiKey: apiKey.trim() || undefined,
-        resendEnabled: enabled,
-      },
-      {
-        onSuccess: () => toast({ message: "Resend settings saved." }),
-        onError: (error) => toast({ message: error.message, tone: "error" }),
-      },
-    );
-  }
-
-  return (
-    <form onSubmit={submit} className="flex flex-col gap-3">
-      <div>
-        <h2 className="text-[13px] font-medium">Invite email</h2>
-        <p className="mt-1 text-[12px] text-muted">
-          Staff invites always get a registration link. Add a Resend API key and from address to
-          email it too. The key is hashed and encrypted. We never show it again.
-        </p>
-      </div>
-      <label className="flex flex-col gap-1.5">
-        <span className="px-1 text-[11px] text-muted">From email</span>
-        <input
-          className="input"
-          type="text"
-          value={from}
-          onChange={(e) => setFrom(e.target.value)}
-          placeholder="UserCue <noreply@yourdomain.com>"
-          autoComplete="off"
-        />
-      </label>
-      <label className="flex flex-col gap-1.5">
-        <span className="px-1 text-[11px] text-muted">API key</span>
-        <input
-          className="input"
-          type="password"
-          value={apiKey}
-          onChange={(e) => setApiKey(e.target.value)}
-          autoComplete="new-password"
-          spellCheck={false}
-          placeholder={
-            data.resend.keyHash || data.resend.fromEnv
-              ? "Leave blank to keep the current key"
-              : "re_…"
-          }
-        />
-        {!data.resend.keyHash && data.resend.fromEnv && (
-          <p className="px-1 text-[11px] text-faint">Using the key from the environment.</p>
-        )}
-      </label>
-      <Checkbox checked={enabled} onChange={setEnabled}>
-        Email staff invites with Resend
-      </Checkbox>
-      <div className="flex items-center gap-2">
-        <div className="flex-1" />
-        <button type="submit" className="btn-primary" disabled={save.isPending}>
-          Save
-        </button>
-      </div>
-    </form>
-  );
-}
-
-function SmtpSettings() {
-  const { data } = useSettings();
-  const save = useSaveSettings();
-  const toast = useToast();
-  const [host, setHost] = useState(data?.smtp?.host ?? "");
-  const [port, setPort] = useState(String(data?.smtp?.port ?? 587));
-  const [user, setUser] = useState(data?.smtp?.user ?? "");
-  const [password, setPassword] = useState("");
-  const [from, setFrom] = useState(data?.smtp?.from ?? "");
-  const [secure, setSecure] = useState(Boolean(data?.smtp?.secure));
-  const [enabled, setEnabled] = useState(Boolean(data?.smtp?.enabled));
-
-  useEffect(() => {
-    if (!data?.smtp) return;
-    setHost(data.smtp.host ?? "");
-    setPort(String(data.smtp.port ?? 587));
-    setUser(data.smtp.user ?? "");
-    setPassword("");
-    setFrom(data.smtp.from ?? "");
-    setSecure(data.smtp.secure);
-    setEnabled(data.smtp.enabled);
-  }, [data]);
-
-  if (!data) return null;
-
-  function submit(e: FormEvent) {
-    e.preventDefault();
-    save.mutate(
-      {
-        smtpHost: host,
-        smtpPort: Number(port),
-        smtpUser: user,
-        smtpPass: password.trim() || undefined,
-        smtpFrom: from,
-        smtpSecure: secure,
-        smtpEnabled: enabled,
-      },
-      {
-        onSuccess: () => toast({ message: "SMTP settings saved." }),
-        onError: (error) => toast({ message: error.message, tone: "error" }),
-      },
-    );
-  }
-
-  return (
-    <form onSubmit={submit} className="flex flex-col gap-3">
-      <div>
-        <h2 className="text-[13px] font-medium">SMTP email</h2>
-        <p className="mt-1 text-[12px] text-muted">
-          Use your own SMTP server for staff invite emails. The password is encrypted and never
-          shown again.
-        </p>
-      </div>
-      <div className="grid grid-cols-[1fr_7rem] gap-2">
-        <label className="flex flex-col gap-1.5">
-          <span className="px-1 text-[11px] text-muted">Host</span>
-          <input
-            className="input"
-            value={host}
-            onChange={(e) => setHost(e.target.value)}
-            placeholder="smtp.example.com"
-            autoComplete="off"
-          />
-        </label>
-        <label className="flex flex-col gap-1.5">
-          <span className="px-1 text-[11px] text-muted">Port</span>
-          <input
-            className="input"
-            type="number"
-            min={1}
-            max={65535}
-            value={port}
-            onChange={(e) => setPort(e.target.value)}
-            required
-          />
-        </label>
-      </div>
-      <label className="flex flex-col gap-1.5">
-        <span className="px-1 text-[11px] text-muted">Username</span>
-        <input
-          className="input"
-          value={user}
-          onChange={(e) => setUser(e.target.value)}
-          autoComplete="off"
-        />
-      </label>
-      <label className="flex flex-col gap-1.5">
-        <span className="px-1 text-[11px] text-muted">Password</span>
-        <input
-          className="input"
-          type="password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          autoComplete="new-password"
-          spellCheck={false}
-          placeholder={
-            data.smtp?.passConfigured || data.smtp?.fromEnv
-              ? "Leave blank to keep the current password"
-              : "SMTP password"
-          }
-        />
-        {!data.smtp?.passConfigured && data.smtp?.fromEnv && (
-          <p className="px-1 text-[11px] text-faint">
-            Using SMTP credentials from the environment.
-          </p>
-        )}
-      </label>
-      <label className="flex flex-col gap-1.5">
-        <span className="px-1 text-[11px] text-muted">From email</span>
-        <input
-          className="input"
-          value={from}
-          onChange={(e) => setFrom(e.target.value)}
-          placeholder="UserCue <noreply@yourdomain.com>"
-          autoComplete="off"
-          required={Boolean(host.trim())}
-        />
-      </label>
-      <Checkbox checked={secure} onChange={setSecure}>
-        Use a secure connection
-      </Checkbox>
-      <Checkbox checked={enabled} onChange={setEnabled}>
-        Email staff invites with SMTP
-      </Checkbox>
-      <div className="flex items-center gap-2">
-        <div className="flex-1" />
-        <button type="submit" className="btn-primary" disabled={save.isPending}>
-          Save
-        </button>
-      </div>
-    </form>
-  );
-}
-
-function DiscordSettings() {
-  const { data } = useSettings();
-  const save = useSaveSettings();
-  const [webhook, setWebhook] = useState("");
-  const [enabled, setEnabled] = useState(Boolean(data?.discord.enabled));
-
-  useEffect(() => {
-    if (!data) return;
-    setWebhook("");
-    setEnabled(data.discord.enabled);
-  }, [data]);
-
-  if (!data) return null;
-
-  function submit(e: FormEvent) {
-    e.preventDefault();
-    save.mutate({
-      discordWebhookUrl: webhook.trim() || undefined,
-      discordEnabled: enabled,
-    });
-  }
-
-  return (
-    <form onSubmit={submit} className="flex flex-col gap-3">
-      <div>
-        <h2 className="text-[13px] font-medium">Discord</h2>
-        <p className="mt-1 text-[12px] text-muted">
-          Post new suggestions, status changes, and comments to a Discord channel. Paste the webhook
-          URL from the channel&apos;s Integrations settings. It is encrypted. We never show it
-          again.
-        </p>
-      </div>
-      <label className="flex flex-col gap-1.5">
-        <span className="px-1 text-[11px] text-muted">Webhook URL</span>
-        <input
-          className="input"
-          type="password"
-          value={webhook}
-          onChange={(e) => setWebhook(e.target.value)}
-          autoComplete="off"
-          spellCheck={false}
-          placeholder={
-            data.discord.configured
-              ? "Leave blank to keep the current webhook"
-              : "https://discord.com/api/webhooks/…"
-          }
-        />
-      </label>
-      <Checkbox checked={enabled} onChange={setEnabled}>
-        Send workspace activity to Discord
-      </Checkbox>
-      <div className="flex items-center gap-2">
-        <ErrorText error={save.error} />
-        <div className="flex-1" />
-        <button type="submit" className="btn-primary" disabled={save.isPending}>
-          Save
-        </button>
-      </div>
-    </form>
-  );
-}
-
-function TeamsSettings() {
-  const { data } = useSettings();
-  const save = useSaveSettings();
-  const [webhook, setWebhook] = useState("");
-  const [enabled, setEnabled] = useState(Boolean(data?.teams.enabled));
-
-  useEffect(() => {
-    if (!data) return;
-    setWebhook("");
-    setEnabled(data.teams.enabled);
-  }, [data]);
-
-  if (!data) return null;
-
-  function submit(e: FormEvent) {
-    e.preventDefault();
-    save.mutate({
-      teamsWebhookUrl: webhook.trim() || undefined,
-      teamsEnabled: enabled,
-    });
-  }
-
-  return (
-    <form onSubmit={submit} className="flex flex-col gap-3">
-      <div>
-        <h2 className="text-[13px] font-medium">Teams</h2>
-        <p className="mt-1 text-[12px] text-muted">
-          Post new suggestions, status changes, and comments to a Teams channel. Paste the incoming
-          webhook from Workflows, or a classic connector URL. It is encrypted. We never show it
-          again.
-        </p>
-      </div>
-      <label className="flex flex-col gap-1.5">
-        <span className="px-1 text-[11px] text-muted">Webhook URL</span>
-        <input
-          className="input"
-          type="password"
-          value={webhook}
-          onChange={(e) => setWebhook(e.target.value)}
-          autoComplete="off"
-          spellCheck={false}
-          placeholder={
-            data.teams.configured
-              ? "Leave blank to keep the current webhook"
-              : "https://….logic.azure.com/workflows/…"
-          }
-        />
-      </label>
-      <Checkbox checked={enabled} onChange={setEnabled}>
-        Send workspace activity to Teams
-      </Checkbox>
-      <div className="flex items-center gap-2">
-        <ErrorText error={save.error} />
-        <div className="flex-1" />
-        <button type="submit" className="btn-primary" disabled={save.isPending}>
-          Save
-        </button>
-      </div>
-    </form>
-  );
-}
-
 function normalizeHex(input: string): string | null {
   const value = input.trim().replace(/^#/, "");
   return /^[0-9a-fA-F]{6}$/.test(value) ? `#${value.toLowerCase()}` : null;
@@ -925,12 +598,6 @@ function CustomAccent({
   );
 }
 
-function assignmentHint(mode: AssignmentMode) {
-  if (mode === "off") return "Nobody can be assigned. The field stays hidden.";
-  if (mode === "manual") return "Staff pick who takes a suggestion.";
-  return "When a suggestion becomes Planned, the next staff member in line gets it.";
-}
-
 type BrandingImage = "logoUrl" | "logoDarkUrl" | "faviconUrl" | "shareImageUrl";
 
 function ImageSlot({
@@ -1002,15 +669,6 @@ function ImageSlot({
         </div>
       </div>
       <ErrorText error={error ?? save.error ?? null} />
-    </div>
-  );
-}
-
-function SectionHead({ title, children }: { title: string; children: ReactNode }) {
-  return (
-    <div>
-      <h2 className="text-[13px] font-medium">{title}</h2>
-      <p className="mt-1 text-[12px] text-muted">{children}</p>
     </div>
   );
 }
@@ -1202,268 +860,6 @@ function BrandingSettings() {
           onSelect={(accent) => save.mutate({ accent })}
         />
       </section>
-    </div>
-  );
-}
-
-function GeneralSettings() {
-  const { data: me } = useMe();
-  const { data, isLoading } = useSettings();
-  const save = useSaveSettings();
-  const invite = useInviteStaff();
-  const revoke = useRevokeInvite();
-  const remove = useRemoveStaff();
-  const [email, setEmail] = useState("");
-  const [lastLink, setLastLink] = useState<string>();
-  const [promoted, setPromoted] = useState<string>();
-  const canSettings = can(me, "manage_settings");
-  const canStaff = can(me, "manage_staff");
-
-  if (isLoading || !data) return null;
-
-  const seats = data.plan.limits.find((limit) => limit.key === "staffSeats");
-  const seatsFull = Boolean(seats?.reached);
-
-  function toggleGuest(allowGuestFeedback: boolean) {
-    save.mutate({ allowGuestFeedback });
-  }
-
-  function submitInvite(e: FormEvent) {
-    e.preventDefault();
-    invite.mutate(email, {
-      onSuccess: (row) => {
-        setEmail("");
-        if ("promoted" in row && row.promoted) {
-          setPromoted(row.name ?? email);
-          setLastLink(undefined);
-          return;
-        }
-        setPromoted(undefined);
-        if ("url" in row) setLastLink(row.url);
-      },
-    });
-  }
-
-  return (
-    <div className="flex flex-col gap-10">
-      {canSettings && (
-        <section className="flex flex-col gap-3">
-          <div>
-            <h2 className="text-[13px] font-medium">Feedback</h2>
-            <p className="mt-1 text-[12px] text-muted">
-              Guests can post with just a name. Turn this off to require a connected account before
-              someone can share feedback.
-            </p>
-          </div>
-          <Checkbox
-            checked={data.allowGuestFeedback}
-            disabled={save.isPending}
-            onChange={toggleGuest}
-          >
-            Allow guests to post feedback without signing in
-          </Checkbox>
-        </section>
-      )}
-
-      {canSettings && (
-        <section className="flex flex-col gap-3">
-          <div>
-            <h2 className="text-[13px] font-medium">Changelog</h2>
-            <p className="mt-1 text-[12px] text-muted">
-              Staff write the updates. Comments and reactions are their own switches, and stay as
-              you left them if you hide the changelog.
-            </p>
-          </div>
-          <Checkbox
-            checked={data.changelogEnabled}
-            disabled={save.isPending}
-            onChange={(changelogEnabled) => save.mutate({ changelogEnabled })}
-          >
-            Publish the changelog
-          </Checkbox>
-          <Checkbox
-            checked={data.changelogComments}
-            disabled={save.isPending}
-            onChange={(changelogComments) => save.mutate({ changelogComments })}
-          >
-            Allow comments on updates
-          </Checkbox>
-          <Checkbox
-            checked={data.changelogReactions}
-            disabled={save.isPending}
-            onChange={(changelogReactions) => save.mutate({ changelogReactions })}
-          >
-            Allow reactions on updates
-          </Checkbox>
-          {data.changelogEnabled && data.changelogRssUrl && (
-            <div className="flex flex-col gap-2 pt-1">
-              <CopyField label="RSS feed" value={data.changelogRssUrl} />
-              <p className="px-1 text-[12px] text-muted">
-                Only staff can see this link. Share the address with anyone who should subscribe.
-              </p>
-            </div>
-          )}
-        </section>
-      )}
-
-      {canSettings && (
-        <section className="flex flex-col gap-3">
-          <div>
-            <h2 className="text-[13px] font-medium">Assignment</h2>
-            <p className="mt-1 text-[12px] text-muted">
-              Decide if staff get put on a suggestion. Automatic hands it to the next person in line
-              when something becomes Planned.
-            </p>
-          </div>
-          <div className="flex flex-col gap-2">
-            {ASSIGNMENT_MODES.map((mode) => (
-              <button
-                key={mode}
-                type="button"
-                disabled={save.isPending}
-                onClick={() => save.mutate({ assignmentMode: mode })}
-                className={`flex flex-col items-start gap-0.5 rounded-2xl px-3.5 py-3 text-left transition-colors ${
-                  data.assignmentMode === mode
-                    ? "bg-accent-soft text-fg"
-                    : "bg-hover/60 text-muted hover:bg-hover hover:text-fg"
-                }`}
-              >
-                <span className="text-[13px] font-medium text-fg">{ASSIGNMENT_LABELS[mode]}</span>
-                <span className="text-[12px] text-muted">{assignmentHint(mode)}</span>
-              </button>
-            ))}
-          </div>
-          <ErrorText error={save.error} />
-        </section>
-      )}
-
-      {canSettings && <ResendSettings />}
-
-      {canSettings && <SmtpSettings />}
-
-      {canSettings && <DiscordSettings />}
-
-      {canSettings && <TeamsSettings />}
-
-      {canStaff && (
-        <section className="flex flex-col gap-4">
-          <div>
-            <h2 className="text-[13px] font-medium">Staff</h2>
-            <p className="mt-1 text-[12px] text-muted">
-              Invite someone to the dashboard. They set their own password from the registration
-              link.
-            </p>
-            {seats && seats.max !== null && (
-              <p className="mt-1 text-[12px] text-faint">
-                {seats.used} of {seats.max} {seats.unit} used on the {data.plan.label} plan. Pending
-                invites count toward this.
-              </p>
-            )}
-          </div>
-
-          <ul className="flex flex-col gap-2">
-            {data.staff.map((person) => (
-              <li key={person.id} className="flex items-center gap-2.5">
-                <Avatar name={person.name} src={person.avatarUrl} size="sm" />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-[13px] font-medium">{person.name}</p>
-                  <p className="truncate text-[11px] text-faint">
-                    {person.email}
-                    {person.roleName ? ` · ${person.roleName}` : ""}
-                  </p>
-                </div>
-                {person.id !== me?.user?.id && (
-                  <button
-                    type="button"
-                    className="btn-quiet h-7 px-2.5"
-                    disabled={remove.isPending}
-                    onClick={() => {
-                      if (confirm(`Remove ${person.name} from staff?`)) remove.mutate(person.id);
-                    }}
-                  >
-                    Remove
-                  </button>
-                )}
-              </li>
-            ))}
-          </ul>
-
-          {seatsFull && seats && seats.max !== null && (
-            <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2.5 text-[12px] leading-5">
-              <p className="font-medium">
-                This instance has reached its limit of {seats.max} staff users.
-              </p>
-              <p className="mt-0.5 text-muted">
-                The {data.plan.label} plan includes {seats.max} {seats.unit}. Upgrade this instance
-                to Pro, or get an additional instance, from your UserCue account to invite more
-                people. Revoking a pending invite also frees a seat.
-              </p>
-            </div>
-          )}
-
-          <form onSubmit={submitInvite} className="flex flex-col gap-2 sm:flex-row">
-            <input
-              className="input"
-              type="email"
-              placeholder="staff@example.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              disabled={seatsFull}
-              required
-            />
-            <button
-              type="submit"
-              className="btn-primary shrink-0"
-              disabled={invite.isPending || seatsFull}
-            >
-              Invite
-            </button>
-          </form>
-          <ErrorText error={invite.error ?? remove.error ?? revoke.error} />
-          {promoted && (
-            <p className="text-[12px] text-muted">
-              {promoted} already had an account. They can now open the workspace.
-            </p>
-          )}
-          {lastLink && (
-            <CopyField
-              label={
-                invite.data && "emailSent" in invite.data && invite.data.emailSent
-                  ? "Invite emailed. You can still copy the link"
-                  : "Registration link"
-              }
-              value={lastLink}
-            />
-          )}
-
-          {data.invites.length > 0 && (
-            <div className="flex flex-col gap-3 border-t pt-4">
-              <p className="text-[11px] font-medium tracking-[0.12em] text-faint uppercase">
-                Pending invites
-              </p>
-              {data.invites.map((row) => (
-                <div key={row.id} className="flex flex-col gap-2">
-                  <div className="flex items-center gap-2">
-                    <p className="min-w-0 flex-1 truncate text-[13px]">{row.email}</p>
-                    <span className="text-[11px] text-faint">
-                      {row.emailSent ? "Emailed · " : ""}
-                      expires {timeAgo(row.expiresAt)}
-                    </span>
-                    <button
-                      type="button"
-                      className="btn-quiet h-7 px-2.5"
-                      onClick={() => revoke.mutate(row.id)}
-                    >
-                      Revoke
-                    </button>
-                  </div>
-                  <CopyField label="Registration link" value={row.url} />
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
-      )}
     </div>
   );
 }

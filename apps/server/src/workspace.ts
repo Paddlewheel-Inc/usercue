@@ -38,6 +38,42 @@ export interface WorkspaceRow {
   site_description: string;
   favicon_url: string;
   share_image_url: string;
+  slack_enabled: number;
+  slack_webhook_cipher: string;
+  slack_webhook_hash: string;
+  notify_voters: number;
+  vote_limit: number;
+  triage_enabled: number;
+  digest_enabled: number;
+  digest_day: number;
+  digest_hour: number;
+  digest_last_sent_at: number;
+  inbound_enabled: number;
+  inbound_secret_cipher: string;
+  inbound_secret_hash: string;
+  ai_enabled: number;
+  ai_base_url: string;
+  ai_model: string;
+  ai_key_cipher: string;
+  ai_key_hash: string;
+}
+
+export interface WorkspaceExtras {
+  slackEnabled?: boolean;
+  slackWebhookUrl?: string;
+  notifyVoters?: boolean;
+  voteLimit?: number;
+  triageEnabled?: boolean;
+  triageBoards?: string[];
+  digestEnabled?: boolean;
+  digestDay?: number;
+  digestHour?: number;
+  inboundEnabled?: boolean;
+  inboundSecret?: string;
+  aiEnabled?: boolean;
+  aiBaseUrl?: string;
+  aiModel?: string;
+  aiApiKey?: string;
 }
 
 export interface Branding {
@@ -138,6 +174,24 @@ const empty: WorkspaceRow = {
   site_description: "",
   favicon_url: "",
   share_image_url: "",
+  slack_enabled: 0,
+  slack_webhook_cipher: "",
+  slack_webhook_hash: "",
+  notify_voters: 1,
+  vote_limit: 0,
+  triage_enabled: 1,
+  digest_enabled: 0,
+  digest_day: 1,
+  digest_hour: 9,
+  digest_last_sent_at: 0,
+  inbound_enabled: 0,
+  inbound_secret_cipher: "",
+  inbound_secret_hash: "",
+  ai_enabled: 0,
+  ai_base_url: "",
+  ai_model: "",
+  ai_key_cipher: "",
+  ai_key_hash: "",
 };
 
 export function parseAssignmentMode(value: string | null | undefined): AssignmentMode {
@@ -158,7 +212,49 @@ export async function getWorkspace(): Promise<WorkspaceRow> {
   return (await select.get()) ?? empty;
 }
 
-export async function saveWorkspace(patch: {
+async function updateColumns(columns: Record<string, string | number>) {
+  const names = Object.keys(columns);
+  if (names.length === 0) return;
+  const assignments = names.map((name) => `${name} = $${name}`).join(", ");
+  await db.query(`UPDATE workspace SET ${assignments} WHERE id = 1`).run(columns);
+}
+
+async function saveExtras(patch: WorkspaceExtras, current: WorkspaceRow) {
+  const columns: Record<string, string | number> = {};
+  const flag = (value: boolean) => (value ? 1 : 0);
+  const secret = (value: string | undefined, cipher: string, hash: string) => {
+    const clean = value?.trim();
+    if (!clean) return;
+    columns[cipher] = encryptSecret(clean);
+    columns[hash] = hashSecret(clean);
+  };
+
+  if (patch.slackEnabled !== undefined) columns.slack_enabled = flag(patch.slackEnabled);
+  secret(patch.slackWebhookUrl, "slack_webhook_cipher", "slack_webhook_hash");
+  if (patch.notifyVoters !== undefined) columns.notify_voters = flag(patch.notifyVoters);
+  if (patch.voteLimit !== undefined) columns.vote_limit = patch.voteLimit;
+  if (patch.triageEnabled !== undefined) columns.triage_enabled = flag(patch.triageEnabled);
+  if (patch.triageBoards !== undefined) await setTriageBoards(patch.triageBoards);
+  if (patch.digestEnabled !== undefined) {
+    columns.digest_enabled = flag(patch.digestEnabled);
+    if (patch.digestEnabled && current.digest_enabled === 0) {
+      columns.digest_last_sent_at = Math.floor(Date.now() / 1000);
+    }
+  }
+  if (patch.digestDay !== undefined) columns.digest_day = patch.digestDay;
+  if (patch.digestHour !== undefined) columns.digest_hour = patch.digestHour;
+  if (patch.inboundEnabled !== undefined) columns.inbound_enabled = flag(patch.inboundEnabled);
+  secret(patch.inboundSecret, "inbound_secret_cipher", "inbound_secret_hash");
+  if (patch.aiEnabled !== undefined) columns.ai_enabled = flag(patch.aiEnabled);
+  if (patch.aiBaseUrl !== undefined)
+    columns.ai_base_url = patch.aiBaseUrl.trim().replace(/\/+$/, "");
+  if (patch.aiModel !== undefined) columns.ai_model = patch.aiModel.trim();
+  secret(patch.aiApiKey, "ai_key_cipher", "ai_key_hash");
+
+  await updateColumns(columns);
+}
+
+export interface WorkspacePatch extends WorkspaceExtras {
   allowGuestFeedback?: boolean;
   resendEnabled?: boolean;
   resendFrom?: string;
@@ -181,7 +277,9 @@ export async function saveWorkspace(patch: {
   oauthOnly?: boolean;
   customerTags?: boolean;
   customerTagsRequired?: boolean;
-}) {
+}
+
+export async function saveWorkspace(patch: WorkspacePatch) {
   const current = await getWorkspace();
   const allow =
     patch.allowGuestFeedback === undefined
@@ -266,6 +364,7 @@ export async function saveWorkspace(patch: {
     customerTags,
     customerTagsRequired,
   );
+  await saveExtras(patch, current);
   return getWorkspace();
 }
 
@@ -364,4 +463,49 @@ export async function pickNextAssignee(): Promise<StaffAssignee | null> {
   const next = staff.find((person) => person.id > cursor) ?? first;
   await setCursor.run(next.id);
   return next;
+}
+
+export async function voteLimit(): Promise<number> {
+  return (await getWorkspace()).vote_limit;
+}
+
+export async function notifyVotersEnabled(): Promise<boolean> {
+  return (await getWorkspace()).notify_voters === 1;
+}
+
+const listTriageBoards = db.query<{ slug: string }>(
+  "SELECT slug FROM boards WHERE triage = 1 ORDER BY id",
+);
+const listAllBoards = db.query<{ slug: string; name: string; triage: number }>(
+  "SELECT slug, name, triage FROM boards ORDER BY id",
+);
+const postTriage = db.query<{ triage: number }>(
+  "SELECT b.triage FROM posts p JOIN boards b ON b.id = p.board_id WHERE p.id = ?",
+);
+const clearTriageBoards = db.query("UPDATE boards SET triage = 0");
+const enableTriageBoard = db.query("UPDATE boards SET triage = 1 WHERE slug = ?");
+
+async function setTriageBoards(slugs: string[]) {
+  await db.transaction(async () => {
+    await clearTriageBoards.run();
+    for (const slug of slugs) await enableTriageBoard.run(slug);
+  });
+}
+
+export async function triageBoardSlugs(): Promise<string[]> {
+  if ((await getWorkspace()).triage_enabled !== 1) return [];
+  return (await listTriageBoards.all()).map((row) => row.slug);
+}
+
+export async function triageBoardChoices() {
+  return (await listAllBoards.all()).map((row) => ({
+    slug: row.slug,
+    name: row.name,
+    enabled: row.triage === 1,
+  }));
+}
+
+export async function triageEnabledFor(postId: number): Promise<boolean> {
+  if ((await getWorkspace()).triage_enabled !== 1) return false;
+  return (await postTriage.get(postId))?.triage === 1;
 }

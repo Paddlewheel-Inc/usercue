@@ -8,16 +8,32 @@ import {
   PERMISSIONS,
   type Permission,
   SITE_LIMITS,
+  VOTE_LIMIT_MAX,
 } from "@usercue/shared";
 import { Hono } from "hono";
 import * as v from "valibot";
+import { recordAudit } from "../audit";
 import { db } from "../db";
 import { planSnapshot, withinPlanLimit } from "../entitlements";
 import { env } from "../env";
-import { resendConfigured, resendCredentials, resendEnabled, sendInviteEmail } from "../mail";
+import {
+  emailEnabled,
+  resendConfigured,
+  resendCredentials,
+  resendEnabled,
+  sendInviteEmail,
+} from "../mail";
 import { type AppEnv, randomToken, requirePermission, requireTeam } from "../middleware";
-import { discordConfigured, isDiscordWebhook, isTeamsWebhook, teamsConfigured } from "../notify";
+import {
+  discordConfigured,
+  isDiscordWebhook,
+  isSlackWebhook,
+  isTeamsWebhook,
+  slackConfigured,
+  teamsConfigured,
+} from "../notify";
 import { publicOrigin } from "../oauth";
+import { jobOrigin } from "../origin";
 import {
   countOwners,
   countWithPermission,
@@ -30,12 +46,14 @@ import {
 } from "../roles";
 import { hashSecret } from "../secret";
 import { smtpConfigured } from "../smtp";
+import { parseWebhookUrl } from "../webhooks";
 import {
   getWorkspace,
   parseAccent,
   parseAssignmentMode,
   saveBranding,
   saveWorkspace,
+  triageBoardChoices,
 } from "../workspace";
 
 const INVITE_TTL = 60 * 60 * 24 * 7;
@@ -310,6 +328,34 @@ async function snapshot(origin: string, includeStaff: boolean) {
       enabled: workspace.teams_enabled === 1,
       keyHash: workspace.teams_webhook_hash ? workspace.teams_webhook_hash.slice(0, 12) : null,
     },
+    slack: {
+      configured: await slackConfigured(),
+      enabled: workspace.slack_enabled === 1,
+      keyHash: workspace.slack_webhook_hash ? workspace.slack_webhook_hash.slice(0, 12) : null,
+    },
+    notifyVoters: workspace.notify_voters === 1,
+    voteLimit: workspace.vote_limit,
+    triage: { enabled: workspace.triage_enabled === 1, boards: await triageBoardChoices() },
+    digest: {
+      enabled: workspace.digest_enabled === 1,
+      day: workspace.digest_day,
+      hour: workspace.digest_hour,
+      ready: Boolean(jobOrigin()) && (await emailEnabled()),
+    },
+    inbound: {
+      enabled: workspace.inbound_enabled === 1,
+      configured: Boolean(workspace.inbound_secret_cipher),
+      keyHash: workspace.inbound_secret_hash ? workspace.inbound_secret_hash.slice(0, 12) : null,
+      url: `${origin}/api/inbound/resend`,
+      resendReady: await resendConfigured(),
+    },
+    ai: {
+      enabled: workspace.ai_enabled === 1,
+      configured: Boolean(workspace.ai_base_url && workspace.ai_model),
+      baseUrl: workspace.ai_base_url || null,
+      model: workspace.ai_model || null,
+      keyHash: workspace.ai_key_hash ? workspace.ai_key_hash.slice(0, 12) : null,
+    },
     oauthOnly: workspace.oauth_only === 1,
     customerTags: workspace.customer_tags === 1,
     customerTagsRequired: workspace.customer_tags === 1 && workspace.customer_tags_required === 1,
@@ -425,6 +471,7 @@ export const settings = new Hono<AppEnv>()
         JSON.stringify(permissions),
       );
       if (!row) throw new Error("API key insert did not return a row");
+      await recordAudit(c, "api_key.created", `Created API key “${name}”`);
       return c.json(
         {
           ...serializeApiKey(row, { name: user.name, avatarUrl: user.avatarUrl }, true),
@@ -495,6 +542,7 @@ export const settings = new Hono<AppEnv>()
       if (!deleted) {
         return c.json({ error: "API key not found" }, 404);
       }
+      await recordAudit(c, "api_key.deleted", `Deleted API key #${id}`);
       return c.json({ ok: true as const });
     },
   )
@@ -527,6 +575,23 @@ export const settings = new Hono<AppEnv>()
         oauthOnly: v.optional(v.boolean()),
         customerTags: v.optional(v.boolean()),
         customerTagsRequired: v.optional(v.boolean()),
+        slackEnabled: v.optional(v.boolean()),
+        slackWebhookUrl: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(2000))),
+        notifyVoters: v.optional(v.boolean()),
+        voteLimit: v.optional(
+          v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(VOTE_LIMIT_MAX)),
+        ),
+        triageEnabled: v.optional(v.boolean()),
+        triageBoards: v.optional(v.array(v.pipe(v.string(), v.maxLength(80)))),
+        digestEnabled: v.optional(v.boolean()),
+        digestDay: v.optional(v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(7))),
+        digestHour: v.optional(v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(23))),
+        inboundEnabled: v.optional(v.boolean()),
+        inboundSecret: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(200))),
+        aiEnabled: v.optional(v.boolean()),
+        aiBaseUrl: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(300))),
+        aiModel: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(100))),
+        aiApiKey: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(300))),
       }),
     ),
     async (c) => {
@@ -564,6 +629,38 @@ export const settings = new Hono<AppEnv>()
       if (body.teamsEnabled && !teamsUrl && !current.teams_webhook_cipher) {
         return c.json({ error: "Add a Teams webhook URL first." }, 400);
       }
+      const slackUrl = body.slackWebhookUrl?.trim();
+      if (slackUrl && !isSlackWebhook(slackUrl)) {
+        return c.json({ error: "Enter a valid Slack webhook URL." }, 400);
+      }
+      if (body.slackEnabled && !slackUrl && !current.slack_webhook_cipher) {
+        return c.json({ error: "Add a Slack webhook URL first." }, 400);
+      }
+      if (body.digestEnabled && (!jobOrigin() || !(await emailEnabled()))) {
+        return c.json(
+          { error: "Turn on email and set PUBLIC_URL before sending the weekly digest." },
+          400,
+        );
+      }
+      if (body.inboundEnabled) {
+        const hasSecret = Boolean(body.inboundSecret?.trim() || current.inbound_secret_cipher);
+        if (!hasSecret || !(await resendConfigured())) {
+          return c.json(
+            { error: "Add a Resend API key and the webhook signing secret first." },
+            400,
+          );
+        }
+      }
+      if (body.aiBaseUrl && !parseWebhookUrl(body.aiBaseUrl)) {
+        return c.json({ error: "Enter a valid AI provider URL." }, 400);
+      }
+      if (body.aiEnabled) {
+        const baseUrl = body.aiBaseUrl ?? current.ai_base_url;
+        const model = body.aiModel ?? current.ai_model;
+        if (!baseUrl || !model) {
+          return c.json({ error: "Add an AI provider URL and model first." }, 400);
+        }
+      }
       if (body.customerTagsRequired) {
         const tags = await countTags.get();
         if (!tags?.n) return c.json({ error: "Add a tag before requiring one." }, 400);
@@ -578,6 +675,7 @@ export const settings = new Hono<AppEnv>()
         }
       }
       await saveWorkspace(body);
+      await recordAudit(c, "settings.updated", `Changed settings: ${Object.keys(body).join(", ")}`);
       const user = c.get("user");
       return c.json(
         await snapshot(
@@ -606,7 +704,13 @@ export const settings = new Hono<AppEnv>()
       }),
     ),
     async (c) => {
-      await saveBranding(c.req.valid("json"));
+      const branding = c.req.valid("json");
+      await saveBranding(branding);
+      await recordAudit(
+        c,
+        "branding.updated",
+        `Changed branding: ${Object.keys(branding).join(", ")}`,
+      );
       const user = c.get("user");
       return c.json(
         await snapshot(
@@ -685,6 +789,11 @@ export const settings = new Hono<AppEnv>()
         if ("blocked" in outcome) return c.json(outcome.blocked, 403);
       }
 
+      const changes = [
+        body.suspended === undefined ? null : body.suspended ? "suspended" : "unsuspended",
+        targetRole ? `role set to ${targetRole.name}` : null,
+      ].filter(Boolean);
+      await recordAudit(c, "user.updated", `Updated ${person.name}: ${changes.join(", ")}`);
       return c.json({ user: serializeUser((await findPerson.get(id)) ?? person) });
     },
   )
@@ -703,6 +812,7 @@ export const settings = new Hono<AppEnv>()
         return c.json({ error: "The workspace needs at least one owner." }, 400);
       }
       await deleteUser.run(id);
+      await recordAudit(c, "user.deleted", `Deleted user ${person.name}`);
       return c.json({ ok: true });
     },
   )
@@ -733,6 +843,7 @@ export const settings = new Hono<AppEnv>()
       }
       const row = await insertRole.get(name, encodePermissions(permissions), iconUrl ?? "");
       if (!row) return c.json({ error: "Could not create the role." }, 500);
+      await recordAudit(c, "role.created", `Created role “${name}”`);
       return c.json(await rolesPayload(), 201);
     },
   )
@@ -809,6 +920,7 @@ export const settings = new Hono<AppEnv>()
         updateRole.run(name, encodePermissions(permissions), iconUrl, id),
       );
       if ("blocked" in outcome) return c.json(outcome.blocked, 403);
+      await recordAudit(c, "role.updated", `Updated role “${name}”`);
       return c.json(await rolesPayload());
     },
   )
@@ -827,6 +939,7 @@ export const settings = new Hono<AppEnv>()
         return c.json({ error: "Reassign users before deleting this role." }, 400);
       }
       await deleteRole.run(id);
+      await recordAudit(c, "role.deleted", `Deleted role “${role.name}”`);
       return c.json(await rolesPayload());
     },
   )
@@ -854,6 +967,7 @@ export const settings = new Hono<AppEnv>()
         );
         if ("blocked" in promotion) return c.json(promotion.blocked, 403);
         const fresh = await findPerson.get(existing.id);
+        await recordAudit(c, "staff.promoted", `Added ${email} to staff`);
         return c.json({
           promoted: true,
           email,
@@ -875,6 +989,7 @@ export const settings = new Hono<AppEnv>()
       if ("blocked" in outcome) return c.json(outcome.blocked, 403);
       const row = outcome.result;
       if (!row) return c.json({ error: "Could not create the invite." }, 500);
+      await recordAudit(c, "staff.invited", `Invited ${email} to the workspace`);
 
       void sendInviteEmail(email, inviteUrl(origin, row.token))
         .then(async (result) => {
@@ -926,6 +1041,7 @@ export const settings = new Hono<AppEnv>()
         return c.json({ error: "The workspace needs at least one staff member." }, 400);
       }
       await setUserRole.run(await memberRoleId(), id);
+      await recordAudit(c, "staff.removed", `Removed ${person.name} from staff`);
       return c.json(await snapshot(publicOrigin(c), true));
     },
   );

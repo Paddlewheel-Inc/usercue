@@ -19,6 +19,8 @@ export interface SessionUser {
   staff: boolean;
   suspended: boolean;
   hasPassword: boolean;
+  emailUpdates: boolean;
+  emailDigest: boolean;
 }
 
 export interface VisitorIdentity {
@@ -36,6 +38,7 @@ export type AppEnv = {
 };
 
 const YEAR = 60 * 60 * 24 * 365;
+const EMBED_VISITOR_ID = /^[A-Za-z0-9_-]{16,64}$/;
 export const SESSION_TTL = 60 * 60 * 24 * 30;
 
 export function randomToken(bytes = 32): string {
@@ -60,6 +63,8 @@ interface SessionRow {
   role_id: number | null;
   suspended: number;
   has_password: number;
+  email_updates: number;
+  email_digest: number;
   permissions: string | null;
   role_name: string | null;
   role_icon: string | null;
@@ -67,6 +72,7 @@ interface SessionRow {
 
 const findSession = db.query<SessionRow, [string, number]>(
   `SELECT u.id, u.email, u.name, u.avatar_url, u.role_id, u.suspended,
+          u.email_updates, u.email_digest,
           CASE WHEN u.password_hash <> '' THEN 1 ELSE 0 END AS has_password,
           r.permissions, r.name AS role_name, r.icon_url AS role_icon
    FROM sessions s
@@ -87,6 +93,7 @@ interface ApiKeySessionRow extends SessionRow {
 
 const findApiKeySession = db.query<ApiKeySessionRow>(
   `SELECT k.id AS api_key_id, u.id, u.email, u.name, u.avatar_url, u.role_id, u.suspended,
+          u.email_updates, u.email_digest,
           CASE WHEN u.password_hash <> '' THEN 1 ELSE 0 END AS has_password,
           r.permissions, r.name AS role_name, r.icon_url AS role_icon,
           k.permissions AS api_key_permissions
@@ -112,6 +119,8 @@ export function toPublicUser(user: SessionUser) {
     staff: user.staff,
     suspended: user.suspended,
     hasPassword: user.hasPassword,
+    emailUpdates: user.emailUpdates,
+    emailDigest: user.emailDigest,
   };
 }
 
@@ -129,14 +138,21 @@ function toSessionUser(row: SessionRow): SessionUser {
     staff: hasPermission(permissions, "dashboard"),
     suspended: row.suspended === 1,
     hasPassword: row.has_password === 1,
+    emailUpdates: row.email_updates === 1,
+    emailDigest: row.email_digest === 1,
   };
 }
 
 export const identify = createMiddleware<AppEnv>(async (c, next) => {
   let visitorId = getCookie(c, "vid");
   if (!visitorId) {
-    visitorId = randomToken(16);
-    setCookieSafe(c, "vid", visitorId, YEAR);
+    const embedded = c.req.header("x-visitor-id");
+    if (embedded && EMBED_VISITOR_ID.test(embedded)) {
+      visitorId = embedded;
+    } else {
+      visitorId = randomToken(16);
+      setCookieSafe(c, "vid", visitorId, YEAR);
+    }
   }
   c.set("visitorId", visitorId);
 

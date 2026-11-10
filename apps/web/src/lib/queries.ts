@@ -1,16 +1,34 @@
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  keepPreviousData,
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import type {
   AssignmentMode,
   AuthProviderId,
   ChangelogPublicationStatus,
   ChangelogReaction,
   Permission,
+  PriorityLevel,
   Sort,
   Status,
   TagColor,
+  WebhookEvent,
 } from "@usercue/shared";
+import { SIMILAR_MIN_LENGTH } from "@usercue/shared";
+import { useToast } from "../components/ui";
 import { applyAccent } from "./accent";
-import { type AuthProvider, api, apiKeys, type Post, type PostDetail, unwrap } from "./api";
+import {
+  ApiError,
+  type AuthProvider,
+  api,
+  apiKeys,
+  type Post,
+  type PostDetail,
+  unwrap,
+} from "./api";
 
 export type { AuthProvider };
 
@@ -20,6 +38,9 @@ export interface PostFilters {
   category?: "open" | "planned" | "in_progress" | "complete" | "closed";
   sort?: Sort;
   q?: string;
+  tag?: string;
+  assignee?: string;
+  minVotes?: string;
 }
 
 export const useMe = () =>
@@ -127,6 +148,7 @@ export function useCreatePost() {
 export function useVote() {
   const qc = useQueryClient();
   const invalidate = useInvalidatePosts();
+  const notify = useToast();
 
   const toggle = <T extends Pick<Post, "id" | "voted" | "voteCount">>(id: number, post: T): T =>
     post.id === id
@@ -139,12 +161,208 @@ export function useVote() {
       qc.setQueriesData<Post[]>({ queryKey: ["posts"] }, (old) => old?.map((p) => toggle(id, p)));
       qc.setQueryData<PostDetail>(["post", id], (old) => old && toggle(id, old));
     },
+    onError: (error) => {
+      if (error instanceof ApiError && error.status === 409) {
+        notify({ message: error.message, tone: "error" });
+      }
+    },
     onSettled: () => {
       invalidate();
       qc.invalidateQueries({ queryKey: ["voters"] });
+      qc.invalidateQueries({ queryKey: ["vote-budget"] });
     },
   });
 }
+
+export const useVoteBudget = () =>
+  useQuery({
+    queryKey: ["vote-budget"],
+    queryFn: () => unwrap(api.posts.budget.$get()),
+    staleTime: 30_000,
+  });
+
+export const useSimilarPosts = (text: string) =>
+  useQuery({
+    queryKey: ["similar", text],
+    queryFn: () => unwrap(api.posts.similar.$get({ query: { q: text } })),
+    enabled: text.length >= SIMILAR_MIN_LENGTH,
+    staleTime: 30_000,
+    placeholderData: keepPreviousData,
+  });
+
+export const usePostTriage = (id: number, enabled: boolean) =>
+  useQuery({
+    queryKey: ["triage", id],
+    queryFn: () => unwrap(api.posts[":id"].triage.$get({ param: { id: String(id) } })),
+    enabled,
+  });
+
+export function useAddNote(postId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: string) =>
+      unwrap(api.posts[":id"].notes.$post({ param: { id: String(postId) }, json: { body } })),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["triage", postId] }),
+  });
+}
+
+export function useDeleteNote(postId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (noteId: number) =>
+      unwrap(
+        api.posts[":id"].notes[":noteId"].$delete({
+          param: { id: String(postId), noteId: String(noteId) },
+        }),
+      ),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["triage", postId] }),
+  });
+}
+
+export function useMergePost(postId: number) {
+  const invalidate = useInvalidatePosts();
+  return useMutation({
+    mutationFn: (targetId: number) =>
+      unwrap(api.posts[":id"].merge.$post({ param: { id: String(postId) }, json: { targetId } })),
+    onSuccess: invalidate,
+  });
+}
+
+export const useSavedViews = (enabled = true) =>
+  useQuery({
+    queryKey: ["views"],
+    queryFn: () => unwrap(api.views.$get()),
+    enabled,
+  });
+
+export function useSaveView() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (json: { name: string; query: string }) => unwrap(api.views.$post({ json })),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["views"] }),
+  });
+}
+
+export function useDeleteView() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => unwrap(api.views[":id"].$delete({ param: { id: String(id) } })),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["views"] }),
+  });
+}
+
+export function useAiSummary() {
+  return useMutation({
+    mutationFn: (postId: number) => unwrap(api.ai.summary.$post({ json: { postId } })),
+  });
+}
+
+export function useAiTags() {
+  return useMutation({
+    mutationFn: (postId: number) => unwrap(api.ai.tags.$post({ json: { postId } })),
+  });
+}
+
+export function useAiChangelog() {
+  return useMutation({
+    mutationFn: (postIds: number[]) => unwrap(api.ai.changelog.$post({ json: { postIds } })),
+  });
+}
+
+export const useWebhooks = () =>
+  useQuery({
+    queryKey: ["webhooks"],
+    queryFn: () => unwrap(api.integrations.webhooks.$get()),
+  });
+
+export function useCreateWebhook() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (json: { name: string; url: string; events: WebhookEvent[] }) =>
+      unwrap(api.integrations.webhooks.$post({ json })),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["webhooks"] }),
+  });
+}
+
+export function useUpdateWebhook() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      ...json
+    }: {
+      id: number;
+      name?: string;
+      url?: string;
+      events?: WebhookEvent[];
+      enabled?: boolean;
+    }) => unwrap(api.integrations.webhooks[":id"].$patch({ param: { id: String(id) }, json })),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["webhooks"] }),
+  });
+}
+
+export function useDeleteWebhook() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) =>
+      unwrap(api.integrations.webhooks[":id"].$delete({ param: { id: String(id) } })),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["webhooks"] }),
+  });
+}
+
+export function useTestWebhook() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) =>
+      unwrap(api.integrations.webhooks[":id"].test.$post({ param: { id: String(id) } })),
+    onSettled: () => qc.invalidateQueries({ queryKey: ["webhooks"] }),
+  });
+}
+
+export type ImportPostRow = {
+  title: string;
+  body: string;
+  status: string;
+  board: string;
+  authorName: string;
+  authorEmail: string;
+  votes: number;
+  createdAt: number | null;
+  tags: string[];
+};
+
+export function useImportPosts() {
+  return useMutation({
+    mutationFn: (rows: ImportPostRow[]) =>
+      unwrap(api.integrations.import.posts.$post({ json: { rows } })),
+  });
+}
+
+export function useFinishImport() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (count: number) => unwrap(api.integrations.import.done.$post({ json: { count } })),
+    onSuccess: () =>
+      Promise.all(
+        ["posts", "counts", "boards", "tags", "audit"].map((key) =>
+          qc.invalidateQueries({ queryKey: [key] }),
+        ),
+      ),
+  });
+}
+
+export const useAudit = () =>
+  useInfiniteQuery({
+    queryKey: ["audit"],
+    queryFn: ({ pageParam }) =>
+      unwrap(
+        api.integrations.audit.$get({
+          query: { before: pageParam ? String(pageParam) : undefined },
+        }),
+      ),
+    initialPageParam: 0,
+    getNextPageParam: (last) => last.nextBefore ?? undefined,
+  });
 
 export function useAddComment(postId: number) {
   const invalidate = useInvalidatePosts();
@@ -169,6 +387,7 @@ export function useDeleteComment(postId: number) {
 }
 
 export function useUpdatePost(id: number) {
+  const qc = useQueryClient();
   const invalidate = useInvalidatePosts();
   return useMutation({
     mutationFn: (patch: {
@@ -178,8 +397,13 @@ export function useUpdatePost(id: number) {
       body?: string;
       assigneeId?: number | null;
       tagIds?: number[];
+      impact?: PriorityLevel | null;
+      effort?: PriorityLevel | null;
     }) => unwrap(api.posts[":id"].$patch({ param: { id: String(id) }, json: patch })),
-    onSuccess: invalidate,
+    onSuccess: () => {
+      invalidate();
+      qc.invalidateQueries({ queryKey: ["triage", id] });
+    },
   });
 }
 
@@ -216,7 +440,8 @@ export interface ChangelogDraft {
   publicationStatus?: ChangelogPublicationStatus;
   publishAt?: number;
   title: string;
-  body: string;
+  body?: string;
+  markdown?: string;
   postId?: number | null;
   imageUrl?: string;
   contributorIds: number[];
@@ -489,6 +714,21 @@ export function useSaveSettings() {
       oauthOnly?: boolean;
       customerTags?: boolean;
       customerTagsRequired?: boolean;
+      slackEnabled?: boolean;
+      slackWebhookUrl?: string;
+      notifyVoters?: boolean;
+      voteLimit?: number;
+      triageEnabled?: boolean;
+      triageBoards?: string[];
+      digestEnabled?: boolean;
+      digestDay?: number;
+      digestHour?: number;
+      inboundEnabled?: boolean;
+      inboundSecret?: string;
+      aiEnabled?: boolean;
+      aiBaseUrl?: string;
+      aiModel?: string;
+      aiApiKey?: string;
     }) => unwrap(api.settings.$patch({ json })),
     onSuccess: (data) => {
       qc.setQueryData(["settings"], data);
@@ -654,6 +894,8 @@ export function useUpdateProfile() {
       password?: string;
       currentPassword?: string;
       avatarUrl?: string;
+      emailUpdates?: boolean;
+      emailDigest?: boolean;
     }) => unwrap(api.auth.me.$patch({ json })),
     onSuccess: () =>
       Promise.all(

@@ -62,7 +62,7 @@ export default defineConfig(({ mode }) => {
         },
         workbox: {
           globPatterns: ["**/*.{js,css,html,svg,woff2}"],
-          navigateFallbackDenylist: [/^\/api\//, /^\/uploads\//],
+          navigateFallbackDenylist: [/^\/api\//, /^\/uploads\//, /^\/embed\//],
         },
         devOptions: {
           enabled: env.PWA_DEV === "true",

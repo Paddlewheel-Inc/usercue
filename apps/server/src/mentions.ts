@@ -1,28 +1,18 @@
 import { LIMITS, parseMentionIds, parseRoleMentionIds, stripHtml } from "@usercue/shared";
 import { db } from "./db";
-import { env } from "./env";
+import { addNotification } from "./inbox";
 import { sendMentionEmail } from "./mail";
+import { emailOrigin } from "./origin";
 
 const findUser = db.query<{ id: number; email: string | null }>(
-  "SELECT id, email FROM users WHERE id = ? AND suspended = 0",
+  "SELECT id, CASE WHEN email_updates = 1 THEN email END AS email FROM users WHERE id = ? AND suspended = 0",
 );
 const findRole = db.query<{ id: number; name: string }>("SELECT id, name FROM roles WHERE id = ?");
 const listRoleMembers = db.query<{ id: number; email: string | null }>(
-  "SELECT id, email FROM users WHERE role_id = ? AND suspended = 0 ORDER BY id LIMIT 200",
+  "SELECT id, CASE WHEN email_updates = 1 THEN email END AS email FROM users WHERE role_id = ? AND suspended = 0 ORDER BY id LIMIT 200",
 );
 const findAvatar = db.query<{ avatar_url: string | null }>(
   "SELECT avatar_url FROM users WHERE id = ?",
-);
-const insertNotification = db.query(
-  `INSERT INTO notifications (user_id, kind, actor_name, actor_avatar, role_name, title, excerpt, path)
-   VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-);
-const pruneNotifications = db.query(
-  `DELETE FROM notifications
-   WHERE user_id = ?
-     AND id NOT IN (
-       SELECT id FROM notifications WHERE user_id = ? ORDER BY created_at DESC, id DESC LIMIT 100
-     )`,
 );
 
 const WINDOW_MS = 60_000;
@@ -52,13 +42,6 @@ function createLimiter(max: number) {
 
 const allowEmail = createLimiter(3);
 const allowNotification = createLimiter(30);
-
-function mailOrigin(fallback: string): string | null {
-  const pinned = env.publicUrl.trim().replace(/\/$/, "");
-  if (pinned) return pinned;
-  if (env.production) return null;
-  return fallback.replace(/\/$/, "") || null;
-}
 
 interface Recipient {
   email: string | null;
@@ -117,20 +100,19 @@ async function deliver(options: MentionOptions): Promise<void> {
 
   for (const [userId, recipient] of recipients) {
     if (!allowNotification(userId)) continue;
-    await insertNotification.run(
+    await addNotification({
       userId,
-      recipient.roleName ? "role" : "mention",
-      options.authorName,
-      avatar,
-      recipient.roleName,
-      options.title,
+      kind: recipient.roleName ? "role" : "mention",
+      actorName: options.authorName,
+      actorAvatar: avatar,
+      roleName: recipient.roleName,
+      title: options.title,
       excerpt,
-      target,
-    );
-    await pruneNotifications.run(userId, userId);
+      path: target,
+    });
   }
 
-  const origin = mailOrigin(options.origin);
+  const origin = emailOrigin(options.origin);
   if (!origin) return;
   const url = `${origin}${target}`;
   let sent = 0;
