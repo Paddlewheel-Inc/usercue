@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+## [1.2.1]
+
+- Add board wipe, redesign the admin overview, and dock the sidebar.
+- Showing '?' instead of '.
+
 ## [1.2.0]
 
 - Suggest similar posts while someone writes a new one, and let staff merge duplicates. Votes and comments move to the kept post, and the old link redirects.
