@@ -10,6 +10,25 @@ UserCue is a feedback home from [Paddlewheel](https://paddlewheel.org). People l
 
 If something feels off, or you want a board to behave differently, open an issue. We read them.
 
+## Hosted
+
+Don't want to run it yourself? We host it for you. Go to [usercue.app](https://usercue.app), create your instance, and you're up in a minute, with no servers, Postgres, or upgrades to look after.
+
+Your first instance is free. Creating it costs nothing.
+
+| | Free | Pro |
+| --- | --- | --- |
+| Price | Free | 16.99 CAD$ / month |
+| Users per instance | Up to 5 | Unlimited |
+| Extra instances | No | Yes |
+
+Custom domains are an add-on at 3.99 CAD$ / month and apply to any instance.
+
+> [!WARNING]
+> Only creating your first instance is free. Free instances are capped at 5 users, and once that limit is reached, new invitations are blocked until you upgrade to Pro or move to an additional instance. Upgrading removes the limit immediately.
+>
+> Pro costs 16.99 CAD$ / month, and custom domains are charged separately at 3.99 CAD$ / month.
+
 ## Run it
 
 You need [Bun](https://bun.com) and [PostgreSQL](https://www.postgresql.org) 17. The first boot creates the local `usercue` role and database if they are missing. Email and sign-in providers can wait until later. Set those in the workspace settings.
