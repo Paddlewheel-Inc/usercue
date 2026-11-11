@@ -15,6 +15,21 @@ const SENDER_MAX = 10;
 
 export class InboundError extends Error {}
 
+export interface InboundActivity {
+  at: number;
+  ok: boolean;
+  message: string;
+}
+
+let lastActivity: InboundActivity | null = null;
+
+export const inboundActivity = () => lastActivity;
+
+export function noteInbound(ok: boolean, message: string) {
+  lastActivity = { at: Math.floor(Date.now() / 1000), ok, message };
+  if (!ok) console.warn(`Email in: ${message}`);
+}
+
 interface ReceivedEmail {
   from?: string;
   to?: string[];
@@ -45,6 +60,7 @@ export async function inboundSecret(): Promise<string | null> {
   try {
     return decryptSecret(workspace.inbound_secret_cipher);
   } catch {
+    console.warn("Email in: could not read the saved signing secret. Save it again.");
     return null;
   }
 }
@@ -80,37 +96,66 @@ function allowSender(email: string): boolean {
 }
 
 async function fetchEmail(emailId: string): Promise<ReceivedEmail> {
-  const credentials = await resendCredentials();
-  if (!credentials) throw new InboundError("Resend is not configured.");
-  const response = await fetch(
-    `https://api.resend.com/emails/receiving/${encodeURIComponent(emailId)}`,
-    {
-      headers: { Authorization: `Bearer ${credentials.key}` },
-      signal: AbortSignal.timeout(15_000),
-    },
-  );
+  let credentials: Awaited<ReturnType<typeof resendCredentials>>;
+  try {
+    credentials = await resendCredentials();
+  } catch {
+    throw new InboundError(
+      "Could not read the saved Resend API key. Check that SECRET_KEY has not changed, then save the key again.",
+    );
+  }
+  if (!credentials) throw new InboundError("Add a Resend API key and from address first.");
+  let response: Response;
+  try {
+    response = await fetch(
+      `https://api.resend.com/emails/receiving/${encodeURIComponent(emailId)}`,
+      {
+        headers: { Authorization: `Bearer ${credentials.key}` },
+        signal: AbortSignal.timeout(15_000),
+      },
+    );
+  } catch {
+    throw new InboundError("Could not reach Resend to read the message.");
+  }
+  if (response.status === 401 || response.status === 403) {
+    throw new InboundError(
+      `Resend rejected the API key (${response.status}). Reading received mail needs a key with full access, not sending access only.`,
+    );
+  }
   if (!response.ok) throw new InboundError(`Resend returned ${response.status}.`);
   return (await response.json()) as ReceivedEmail;
 }
 
-export async function processInbound(emailId: string): Promise<void> {
-  if (!(await claimEmail.get(emailId))) return;
+export async function processInbound(emailId: string): Promise<InboundActivity> {
+  if (!(await claimEmail.get(emailId))) {
+    return { at: Math.floor(Date.now() / 1000), ok: true, message: "Already processed." };
+  }
   try {
-    await ingest(await fetchEmail(emailId));
+    return await ingest(await fetchEmail(emailId));
   } catch (error) {
     await releaseEmail.run(emailId);
     throw error;
   }
 }
 
-async function ingest(email: ReceivedEmail): Promise<void> {
+function outcome(ok: boolean, message: string): InboundActivity {
+  return { at: Math.floor(Date.now() / 1000), ok, message };
+}
+
+async function ingest(email: ReceivedEmail): Promise<InboundActivity> {
   const sender = parseSender(email.from ?? "");
-  if (!sender || !allowSender(sender.email)) return;
+  if (!sender) return outcome(false, "Ignored a message with no readable sender address.");
+  if (!allowSender(sender.email)) {
+    return outcome(
+      false,
+      `Ignored ${sender.email}: over the limit of ${SENDER_MAX} emails an hour.`,
+    );
+  }
   const board = await resolveBoard(email.to ?? []);
-  if (!board) return;
+  if (!board) return outcome(false, "Ignored a message because the workspace has no boards.");
 
   const user = await findUser.get(sender.email);
-  if (user?.suspended === 1) return;
+  if (user?.suspended === 1) return outcome(false, `Ignored ${sender.email}: account suspended.`);
   const text = email.text?.trim() ? email.text : stripHtml(email.html ?? "");
   const body = cleanBody(text);
   const title = cleanSubject(email.subject ?? "");
@@ -125,8 +170,9 @@ async function ingest(email: ReceivedEmail): Promise<void> {
     voterId: `email:${hashSecret(sender.email).slice(0, 32)}`,
   });
 
+  const created = outcome(true, `Created request #${id} on ${board.name} from ${sender.email}.`);
   const origin = jobOrigin();
-  if (!origin) return;
+  if (!origin) return created;
   const post = {
     id,
     title,
@@ -141,4 +187,5 @@ async function ingest(email: ReceivedEmail): Promise<void> {
   };
   void notifyNewPost(origin, post);
   void emitWebhook("post.created", webhookPost(origin, post));
+  return created;
 }

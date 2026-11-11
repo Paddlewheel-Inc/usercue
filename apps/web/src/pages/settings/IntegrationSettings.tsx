@@ -341,6 +341,17 @@ function EmbedSettings() {
   );
 }
 
+function isLocalUrl(url: string) {
+  try {
+    const host = new URL(url).hostname;
+    return (
+      host === "localhost" || host === "127.0.0.1" || host === "::1" || host.endsWith(".local")
+    );
+  } catch {
+    return false;
+  }
+}
+
 function InboundSettings() {
   const { data } = useSettings();
   const save = useSaveSettings();
@@ -368,8 +379,14 @@ function InboundSettings() {
       </SectionHead>
       {!data.inbound.resendReady && (
         <p className="rounded-2xl bg-hover/60 px-3.5 py-3 text-[12px] text-muted">
-          Add your Resend API key under Notifications first. It is used to read the incoming
-          message.
+          Add your Resend API key and from address under Notifications first. The key needs full
+          access, because it is used to read the incoming message.
+        </p>
+      )}
+      {isLocalUrl(data.inbound.url) && (
+        <p className="rounded-2xl bg-hover/60 px-3.5 py-3 text-[12px] text-muted">
+          Resend cannot reach this address from the internet. Set <code>PUBLIC_URL</code> to your
+          public domain, or use a tunnel while testing.
         </p>
       )}
       <ol className="flex list-decimal flex-col gap-1.5 pl-8 text-[12px] leading-5 text-muted">
@@ -385,6 +402,23 @@ function InboundSettings() {
         </li>
       </ol>
       <CopyField label="Webhook endpoint" value={data.inbound.url} />
+      {data.inbound.enabled && (
+        <p className="flex items-start gap-2 px-1 text-[12px] leading-5 text-muted">
+          <span
+            aria-hidden
+            className={`mt-1.5 size-1.5 shrink-0 rounded-full ${
+              data.inbound.last
+                ? data.inbound.last.ok
+                  ? "bg-emerald-500"
+                  : "bg-rose-500"
+                : "bg-faint"
+            }`}
+          />
+          {data.inbound.last
+            ? `${data.inbound.last.message} ${timeAgo(data.inbound.last.at)}.`
+            : "No email has reached UserCue since the server started."}
+        </p>
+      )}
       <label className="flex flex-col gap-1.5">
         <span className="px-1 text-[11px] text-muted">Signing secret</span>
         <input

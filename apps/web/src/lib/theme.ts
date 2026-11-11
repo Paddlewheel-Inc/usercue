@@ -4,7 +4,7 @@ const KEY = "usercue-theme";
 
 export type Theme = "light" | "dark";
 
-const THEME_COLOR: Record<Theme, string> = { dark: "#080706", light: "#f3efe8" };
+const THEME_COLOR: Record<Theme, string> = { dark: "#050403", light: "#f3efe8" };
 
 const listeners = new Set<() => void>();
 

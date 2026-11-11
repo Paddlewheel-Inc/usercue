@@ -583,6 +583,20 @@ export function useDeleteBoard() {
   });
 }
 
+export function useWipeBoard() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ slug, confirm }: { slug: string; confirm: string }) =>
+      unwrap(api.boards[":slug"].wipe.$post({ param: { slug }, json: { confirm } })),
+    onSuccess: () =>
+      Promise.all([
+        qc.invalidateQueries({ queryKey: ["posts"] }),
+        qc.invalidateQueries({ queryKey: ["post"] }),
+        qc.invalidateQueries({ queryKey: ["counts"] }),
+      ]),
+  });
+}
+
 function refreshTags(qc: ReturnType<typeof useQueryClient>) {
   return Promise.all([
     qc.invalidateQueries({ queryKey: ["tags"] }),

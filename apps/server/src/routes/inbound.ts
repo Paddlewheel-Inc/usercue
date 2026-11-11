@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { InboundError, inboundSecret, processInbound } from "../inbound";
+import { InboundError, inboundSecret, noteInbound, processInbound } from "../inbound";
 import { verifySvixSignature } from "../signatures";
 
 interface ResendEvent {
@@ -21,7 +21,13 @@ export const inbound = new Hono().post("/resend", async (c) => {
     },
     body,
   );
-  if (!verified) return c.json({ error: "Invalid signature" }, 401);
+  if (!verified) {
+    noteInbound(
+      false,
+      "A request failed the signature check. Paste the signing secret from the same Resend webhook.",
+    );
+    return c.json({ error: "Invalid signature" }, 401);
+  }
 
   let event: ResendEvent;
   try {
@@ -33,9 +39,14 @@ export const inbound = new Hono().post("/resend", async (c) => {
   if (event.type !== "email.received" || !emailId) return c.json({ ok: true });
 
   try {
-    await processInbound(emailId);
+    const result = await processInbound(emailId);
+    noteInbound(result.ok, result.message);
   } catch (error) {
-    if (error instanceof InboundError) return c.json({ error: error.message }, 502);
+    if (error instanceof InboundError) {
+      noteInbound(false, error.message);
+      return c.json({ error: error.message }, 502);
+    }
+    noteInbound(false, "Could not save the request. Check the server logs.");
     throw error;
   }
   return c.json({ ok: true });

@@ -647,6 +647,8 @@ function EntryForm({
       : "",
   );
   const [preview, setPreview] = useState(false);
+  const [missingTitle, setMissingTitle] = useState(false);
+  const titleInput = useRef<HTMLInputElement>(null);
   const rendered = mode === "markdown" ? markdownToHtml(markdown, CHANGELOG_MARKDOWN) : body;
   const busy = pending ?? create.isPending;
 
@@ -675,6 +677,11 @@ function EntryForm({
 
   function submit(e: FormEvent) {
     e.preventDefault();
+    if (!title.trim()) {
+      setMissingTitle(true);
+      titleInput.current?.focus();
+      return;
+    }
     const next: ChangelogDraft = {
       publicationStatus,
       ...(publicationStatus === "scheduled"
@@ -703,12 +710,16 @@ function EntryForm({
   return (
     <form onSubmit={submit} className="card overflow-hidden">
       <input
+        ref={titleInput}
         className="h-12 w-full bg-transparent px-4 text-[13px] outline-none placeholder:text-faint"
         placeholder="Update title"
         value={title}
         maxLength={LIMITS.title}
-        onChange={(e) => setTitle(e.target.value)}
-        required
+        onChange={(e) => {
+          setTitle(e.target.value);
+          setMissingTitle(false);
+        }}
+        aria-invalid={missingTitle}
       />
       <div className="flex flex-col gap-3 px-4 pb-3">
         {preview ? (
@@ -816,6 +827,9 @@ function EntryForm({
         </div>
         <div className="flex flex-wrap items-center gap-2 border-t pt-3">
           <ErrorText error={failure} />
+          {missingTitle && (
+            <p className="text-xs text-rose-500">Add a title to save this update.</p>
+          )}
           <button
             type="button"
             className="btn-quiet"
@@ -828,11 +842,7 @@ function EntryForm({
           <button type="button" className="btn-quiet" onClick={onDone}>
             Cancel
           </button>
-          <button
-            type="submit"
-            className="btn-primary"
-            disabled={busy || !title.trim() || (publicationStatus === "scheduled" && !schedule)}
-          >
+          <button type="submit" className="btn-primary" disabled={busy}>
             {busy
               ? "Saving…"
               : publicationStatus === "draft"

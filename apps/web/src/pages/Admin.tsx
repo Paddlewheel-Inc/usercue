@@ -65,7 +65,7 @@ function SidebarLink({
   return (
     <Link
       href={to}
-      className={`flex h-8 shrink-0 items-center gap-2.5 rounded-full px-2.5 text-[13px] transition-colors ${className} ${
+      className={`flex h-8 shrink-0 items-center gap-2.5 rounded-xl px-2.5 text-[13px] transition-colors ${className} ${
         active
           ? "bg-accent-soft font-medium text-accent-text"
           : "text-muted hover:bg-hover hover:text-fg"
@@ -135,20 +135,13 @@ function Sidebar({
       }}
       className={`${
         open ? "flex translate-x-0" : "hidden md:flex"
-      } fixed inset-y-0 left-0 z-50 w-[16.5rem] shrink-0 flex-col p-3 transition-transform md:static md:z-auto md:translate-x-0`}
+      } fixed inset-y-0 left-0 z-50 w-64 shrink-0 flex-col bg-surface shadow-[var(--shadow-lg)] transition-transform md:static md:z-auto md:translate-x-0 md:shadow-none`}
     >
-      <div className="relative flex min-h-0 flex-1 flex-col overflow-y-auto rounded-[1.75rem] bg-surface px-3 pt-5 pb-3 shadow-[var(--shadow)]">
-        <div
-          aria-hidden
-          className="pointer-events-none absolute inset-x-0 top-0 h-24 rounded-t-[1.75rem] bg-[radial-gradient(ellipse_at_top,color-mix(in_srgb,var(--accent)_16%,transparent),transparent_72%)]"
-        />
+      <Link href="/" aria-label="Usercue" className="flex h-14 shrink-0 items-center px-5">
+        <Logo wordmark={false} />
+      </Link>
 
-        <Link href="/" aria-label="Usercue" className="relative mb-5 flex justify-center pt-1">
-          <span className="scale-125">
-            <Logo wordmark={false} />
-          </span>
-        </Link>
-
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-3 pt-3 pb-3">
         <SidebarLink to="/admin" active={dashboard}>
           <Heart
             className={dashboard ? "text-accent" : "text-faint"}
@@ -200,27 +193,28 @@ function Sidebar({
             </SidebarLink>
           )}
         </Section>
+      </div>
 
-        <div className="relative mt-auto flex flex-col gap-1 pt-3">
-          <ThemeToggle labeled />
-          <div className="flex items-center gap-2 rounded-full px-2 py-1.5">
-            <Avatar name={me?.user?.name ?? "?"} src={me?.user?.avatarUrl} size="sm" />
-            <span className="min-w-0 flex-1 truncate text-[13px] font-medium">
-              {me?.user?.name}
-            </span>
-            {me?.user?.staff && me.user.roleName && (
-              <RoleBadge name={me.user.roleName} iconUrl={me.user.roleIcon} size="xs" />
-            )}
-            <NotificationBell placement="up" />
-            <button
-              type="button"
-              className="inline-flex size-7 items-center justify-center rounded-full text-faint transition-colors hover:bg-hover hover:text-fg"
-              aria-label="Sign out"
-              onClick={() => logout.mutate(undefined, { onSuccess: () => navigate("/") })}
-            >
-              <LogOut />
-            </button>
-          </div>
+      <div className="flex shrink-0 flex-col gap-1 p-3">
+        <ThemeToggle
+          labeled
+          className="flex h-8 w-full items-center gap-2.5 rounded-xl px-2.5 text-[13px] text-muted transition-colors hover:bg-hover hover:text-fg"
+        />
+        <div className="flex items-center gap-2 rounded-xl px-2 py-1.5">
+          <Avatar name={me?.user?.name ?? "?"} src={me?.user?.avatarUrl} size="sm" />
+          <span className="min-w-0 flex-1 truncate text-[13px] font-medium">{me?.user?.name}</span>
+          {me?.user?.staff && me.user.roleName && (
+            <RoleBadge name={me.user.roleName} iconUrl={me.user.roleIcon} size="xs" />
+          )}
+          <NotificationBell placement="up" />
+          <button
+            type="button"
+            className="inline-flex size-7 items-center justify-center rounded-full text-faint transition-colors hover:bg-hover hover:text-fg"
+            aria-label="Sign out"
+            onClick={() => logout.mutate(undefined, { onSuccess: () => navigate("/") })}
+          >
+            <LogOut />
+          </button>
         </div>
       </div>
     </aside>
@@ -422,7 +416,7 @@ function BoardsNav({
       ) : allowCreate ? (
         <button
           type="button"
-          className="flex h-8 w-full items-center gap-2.5 rounded-full px-2.5 text-[13px] text-muted transition-colors hover:bg-hover hover:text-fg"
+          className="flex h-8 w-full items-center gap-2.5 rounded-xl px-2.5 text-[13px] text-muted transition-colors hover:bg-hover hover:text-fg"
           onClick={() => setAdding(true)}
         >
           <Plus className="text-faint" /> New board

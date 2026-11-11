@@ -11,6 +11,7 @@ const LOGO = "/usercue.svg";
 const REPO = "https://github.com/Paddlewheel-Inc/usercue";
 const PADDLEWHEEL = "https://paddlewheel.org";
 const DOCS = "https://docs.usercue.app";
+const DISCORD = "https://discord.usercue.app";
 const CHROME = "max-w-[1080px]";
 
 function NavLink({
@@ -167,6 +168,11 @@ function Footer() {
               Documentation
             </FooterLink>
           </li>
+          <li>
+            <FooterLink href={DISCORD} external>
+              Discord
+            </FooterLink>
+          </li>
         </FooterCol>
         <FooterCol title="Guides">
           <li>
@@ -237,15 +243,9 @@ function AccountMenu() {
           role="menu"
           className="absolute top-full left-1/2 z-30 mt-3.5 w-52 origin-top -translate-x-1/2 animate-rise overflow-hidden rounded-2xl bg-bg shadow-[0_0_0_1px_var(--line),var(--shadow)]"
         >
-          <div className="relative px-3 pt-3 pb-2.5 text-center">
-            <div
-              aria-hidden
-              className="pointer-events-none absolute inset-x-0 top-0 h-10 bg-[radial-gradient(90%_100%_at_50%_0%,color-mix(in_srgb,var(--accent)_12%,transparent),transparent_72%)]"
-            />
-            <p className="relative truncate text-[12px] font-medium tracking-tight text-fg">
-              {user.name}
-            </p>
-            <p className="relative truncate text-[10px] text-faint">{user.email}</p>
+          <div className="px-3 pt-3 pb-2.5 text-center">
+            <p className="truncate text-[12px] font-medium tracking-tight text-fg">{user.name}</p>
+            <p className="truncate text-[10px] text-faint">{user.email}</p>
           </div>
           <div className="flex flex-col gap-1 px-2.5 pb-2.5">
             {user.staff && (

@@ -16,6 +16,7 @@ import { recordAudit } from "../audit";
 import { db } from "../db";
 import { planSnapshot, withinPlanLimit } from "../entitlements";
 import { env } from "../env";
+import { inboundActivity } from "../inbound";
 import {
   emailEnabled,
   resendConfigured,
@@ -348,6 +349,7 @@ async function snapshot(origin: string, includeStaff: boolean) {
       keyHash: workspace.inbound_secret_hash ? workspace.inbound_secret_hash.slice(0, 12) : null,
       url: `${origin}/api/inbound/resend`,
       resendReady: await resendConfigured(),
+      last: inboundActivity(),
     },
     ai: {
       enabled: workspace.ai_enabled === 1,

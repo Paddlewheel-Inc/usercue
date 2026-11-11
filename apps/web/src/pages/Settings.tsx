@@ -47,6 +47,7 @@ import {
 } from "../lib/queries";
 import { AdminShell } from "./Admin";
 import { AuditSettings } from "./settings/AuditSettings";
+import { DangerSettings } from "./settings/DangerSettings";
 import { GeneralSettings } from "./settings/GeneralSettings";
 import { IntegrationSettings } from "./settings/IntegrationSettings";
 import { NotificationSettings } from "./settings/NotificationSettings";
@@ -66,6 +67,7 @@ const TABS = [
   { id: "users", href: "/admin/settings/users", label: "Users" },
   { id: "roles", href: "/admin/settings/roles", label: "Roles" },
   { id: "audit", href: "/admin/settings/audit", label: "Audit log" },
+  { id: "danger", href: "/admin/settings/danger", label: "Danger zone" },
 ] as const;
 
 type SettingsTab = (typeof TABS)[number]["id"];
@@ -86,6 +88,7 @@ export function Settings() {
     ) {
       return can(me, "manage_settings");
     }
+    if (tab.id === "danger") return can(me, "manage_boards");
     if (tab.id === "users") return can(me, "manage_users");
     if (tab.id === "api-keys") return can(me, "dashboard");
     return can(me, "manage_roles");
@@ -109,10 +112,8 @@ export function Settings() {
   return (
     <AdminShell settings>
       <section className="min-w-0 flex-1 overflow-y-auto">
-        <div
-          className={`flex flex-col gap-7 px-5 py-7 sm:px-8 sm:py-10 ${wide ? "max-w-2xl" : "max-w-xl"}`}
-        >
-          <header className="flex flex-col gap-4">
+        <div className="flex flex-col gap-7 px-5 py-7 sm:px-8 sm:py-10">
+          <header className="flex max-w-2xl flex-col gap-4">
             <div>
               <h1 className="text-base font-semibold tracking-tight">Settings</h1>
               <p className="mt-1.5 text-muted">
@@ -127,31 +128,35 @@ export function Settings() {
               ))}
             </nav>
           </header>
-          {tab === "auth" ? (
-            <AuthSettings />
-          ) : tab === "workflow" ? (
-            <WorkflowSettings />
-          ) : tab === "branding" ? (
-            <BrandingSettings />
-          ) : tab === "tags" ? (
-            <TagsSettings />
-          ) : tab === "users" ? (
-            <UsersSettings />
-          ) : tab === "roles" ? (
-            <RolesSettings />
-          ) : tab === "api-keys" ? (
-            <ApiKeysSettings />
-          ) : tab === "notifications" ? (
-            <NotificationSettings />
-          ) : tab === "integrations" ? (
-            <IntegrationSettings />
-          ) : tab === "team" ? (
-            <StaffSettings />
-          ) : tab === "audit" ? (
-            <AuditSettings />
-          ) : (
-            <GeneralSettings />
-          )}
+          <div className={`flex flex-col ${wide ? "max-w-2xl" : "max-w-xl"}`}>
+            {tab === "auth" ? (
+              <AuthSettings />
+            ) : tab === "workflow" ? (
+              <WorkflowSettings />
+            ) : tab === "branding" ? (
+              <BrandingSettings />
+            ) : tab === "tags" ? (
+              <TagsSettings />
+            ) : tab === "users" ? (
+              <UsersSettings />
+            ) : tab === "roles" ? (
+              <RolesSettings />
+            ) : tab === "api-keys" ? (
+              <ApiKeysSettings />
+            ) : tab === "notifications" ? (
+              <NotificationSettings />
+            ) : tab === "integrations" ? (
+              <IntegrationSettings />
+            ) : tab === "team" ? (
+              <StaffSettings />
+            ) : tab === "audit" ? (
+              <AuditSettings />
+            ) : tab === "danger" ? (
+              <DangerSettings />
+            ) : (
+              <GeneralSettings />
+            )}
+          </div>
         </div>
       </section>
     </AdminShell>
@@ -777,7 +782,7 @@ function BrandingSettings() {
           value={data.logoDarkUrl}
           fallback={data.logoUrl || "/usercue.svg"}
           field="logoDarkUrl"
-          preview={logoWell("bg-[#080706]")}
+          preview={logoWell("bg-[#050403]")}
         />
       </section>
 

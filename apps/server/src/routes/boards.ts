@@ -1,6 +1,7 @@
 import { vValidator } from "@hono/valibot-validator";
 import { Hono } from "hono";
 import * as v from "valibot";
+import { recordAudit } from "../audit";
 import { type BoardRow, db } from "../db";
 import { type AppEnv, requirePermission } from "../middleware";
 
@@ -12,6 +13,11 @@ const renameBoard = db.query<BoardRow>(
   "UPDATE boards SET name = ? WHERE slug = ? RETURNING id, slug, name",
 );
 const deleteBoard = db.query<{ id: number }>("DELETE FROM boards WHERE slug = ? RETURNING id");
+const findBoard = db.query<BoardRow>("SELECT id, slug, name FROM boards WHERE slug = ?");
+const wipePosts = db.query<{ count: number }>(
+  `WITH removed AS (DELETE FROM posts WHERE board_id = ? RETURNING id)
+   SELECT COUNT(*)::int AS count FROM removed`,
+);
 
 const slugify = (name: string) =>
   name
@@ -58,6 +64,25 @@ export const boards = new Hono<AppEnv>()
       const board = await renameBoard.get(name, slug);
       if (!board) return c.json({ error: "Board not found" }, 404);
       return c.json(board);
+    },
+  )
+
+  .post(
+    "/:slug/wipe",
+    requirePermission("manage_boards"),
+    vValidator("param", v.object({ slug: v.string() })),
+    vValidator("json", v.object({ confirm: v.string() })),
+    async (c) => {
+      const { slug } = c.req.valid("param");
+      const { confirm } = c.req.valid("json");
+      const board = await findBoard.get(slug);
+      if (!board) return c.json({ error: "Board not found" }, 404);
+      if (confirm !== board.slug) {
+        return c.json({ error: "Type the board slug to confirm" }, 400);
+      }
+      const removed = (await wipePosts.get(board.id))?.count ?? 0;
+      await recordAudit(c, "board.wiped", `Wiped ${removed} requests from “${board.name}”`);
+      return c.json({ ok: true, removed });
     },
   )
 

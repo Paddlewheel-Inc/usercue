@@ -40,10 +40,10 @@
 [data-theme="dark"] {
   color-scheme: dark;
 
-  --bg: #080706;
-  --surface: #121110;
-  --hover: #1c1a18;
-  --line: #2a2724;
+  --bg: #050403;
+  --surface: #0d0b0a;
+  --hover: #171513;
+  --line: #221f1c;
 
   --fg: #f3eee8;
   --muted: #9c958c;
