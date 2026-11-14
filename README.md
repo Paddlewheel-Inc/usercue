@@ -1,5 +1,5 @@
 <div align="left">
-  <img src="https://cdn.paddlewheel.org/brand/brandfull.svg" height="28px" alt="UserCue" />
+  <img src="https://cdn.paddlewheel.org/brand/usercue/usercuesolobrand.svg" height="28px" alt="UserCue" />
 </div>
 
 # A board for ideas, and a desk for the people who ship them
