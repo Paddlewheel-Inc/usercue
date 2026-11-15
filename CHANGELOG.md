@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+## [1.2.2-rc.2]
+- Add video support to media, drag-and-drop media support
+
 ## [1.2.2]
 - Add video support to media, drag-and-drop media support
 
