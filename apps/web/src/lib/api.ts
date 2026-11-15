@@ -50,13 +50,17 @@ export const apiKeys = {
 type JsonResponse = { ok: boolean; status: number; json(): Promise<unknown> };
 type Success<R extends JsonResponse> = Exclude<Awaited<ReturnType<R["json"]>>, { error: string }>;
 
-export async function uploadImage(file: File): Promise<string> {
+export async function uploadFile(file: File): Promise<string> {
   const data = new FormData();
   data.append("file", file);
   const res = await fetch("/api/uploads", { method: "POST", body: data });
   const body = (await res.json()) as { url?: string; error?: string };
-  if (!res.ok || !body.url) throw new ApiError(body.error ?? "Could not upload image", res.status);
+  if (!res.ok || !body.url) throw new ApiError(body.error ?? "Could not upload file", res.status);
   return body.url;
+}
+
+export function uploadImage(file: File): Promise<string> {
+  return uploadFile(file);
 }
 
 export async function unwrap<R extends JsonResponse>(response: Promise<R>): Promise<Success<R>> {

@@ -116,6 +116,7 @@ export const LIMITS = {
   comment: 2000,
   name: 60,
   imageBytes: 1_500_000,
+  videoBytes: 32_000_000,
   mentions: 8,
   roleMentions: 3,
 } as const;
