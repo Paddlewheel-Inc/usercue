@@ -4,6 +4,7 @@ import { createPortal } from "react-dom";
 import { useLocation } from "wouter";
 import { excerpt, postIdFromHref, timeAgo } from "../lib/format";
 import { usePost } from "../lib/queries";
+import { enhanceVideos } from "./player";
 import { Avatar } from "./ui";
 import { StatusIcon } from "./WorkflowIcon";
 
@@ -46,8 +47,13 @@ function useSuggestionPreview() {
 
 export function RichText({ html }: { html: string }) {
   const safe = sanitizeHtml(html);
+  const body = useRef<HTMLDivElement>(null);
   const [, navigate] = useLocation();
   const { preview, show, hide, hold } = useSuggestionPreview();
+
+  useEffect(() => {
+    if (body.current) enhanceVideos(body.current);
+  }, [safe]);
 
   if (!safe) return null;
 
@@ -74,6 +80,7 @@ export function RichText({ html }: { html: string }) {
   return (
     <>
       <div
+        ref={body}
         className="rich"
         dangerouslySetInnerHTML={{ __html: safe }}
         onMouseOver={onOver}

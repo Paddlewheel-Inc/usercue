@@ -37,7 +37,7 @@ export function stripHtml(html: string): string {
 }
 
 export function isEmptyHtml(html: string): boolean {
-  if (/<img\b/i.test(html)) return false;
+  if (/<(?:img|video)\b/i.test(html)) return false;
   if (/data-section\s*=/i.test(html)) return false;
   if (/data-mention(?:-role)?\s*=/i.test(html)) return false;
   return stripHtml(html).length === 0;
@@ -112,6 +112,11 @@ function safeSrc(value: string): string | null {
   return null;
 }
 
+function uploadSrc(value: string): string | null {
+  const v = value.trim();
+  return /^\/(?:api\/)?uploads\/[A-Za-z0-9._-]+$/.test(v) ? v : null;
+}
+
 function highlightSpan(attrs: string): boolean {
   return /background(?:-color)?\s*:/i.test(attrs);
 }
@@ -171,6 +176,23 @@ function attrsFor(tag: string, raw: string): string {
   return out;
 }
 
+function videoTag(raw: string, lead: boolean): string | null {
+  let src = "";
+  let preload = false;
+  let locked = false;
+  for (const { name, value } of rawAttrs(raw)) {
+    if (name === "src" && !src) src = uploadSrc(value) ?? "";
+    if (name === "preload" && value.trim() === "metadata") preload = true;
+    if (name === "contenteditable" && value.trim() === "false") locked = true;
+  }
+  if (!src) return null;
+  let attrs = ` src="${src}" playsinline`;
+  if (preload) attrs += ' preload="metadata"';
+  if (locked) attrs += ' contenteditable="false"';
+  if (lead) attrs += " data-lead";
+  return `<video${attrs}></video>`;
+}
+
 function hasSrc(raw: string): boolean {
   ATTR.lastIndex = 0;
   for (const match of raw.matchAll(ATTR)) {
@@ -188,6 +210,7 @@ export function sanitizeHtml(input: string): string {
   if (!input) return "";
   let out = "";
   let i = 0;
+  let seenVideo = false;
   const stack: string[] = [];
 
   while (i < input.length) {
@@ -221,6 +244,18 @@ export function sanitizeHtml(input: string): string {
         const end = input.toLowerCase().indexOf(endTag, i);
         i = end === -1 ? input.length : end + endTag.length;
       }
+      continue;
+    }
+
+    if (name === "video" && !closing) {
+      const tag = videoTag(attrStr, !seenVideo);
+      if (tag) {
+        seenVideo = true;
+        out += tag;
+      }
+      const endTag = "</video>";
+      const end = input.toLowerCase().indexOf(endTag, i);
+      if (end !== -1) i = end + endTag.length;
       continue;
     }
 

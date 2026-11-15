@@ -16,13 +16,14 @@ import {
 } from "@usercue/shared";
 import {
   type PointerEvent,
+  type DragEvent as ReactDragEvent,
   type ReactNode,
   useEffect,
   useLayoutEffect,
   useRef,
   useState,
 } from "react";
-import { uploadImage } from "../lib/api";
+import { uploadFile } from "../lib/api";
 import { type EmojiMatch, emojiFor, loadEmoji, searchEmoji } from "../lib/emoji";
 import { usePeople, usePosts } from "../lib/queries";
 import {
@@ -38,6 +39,7 @@ import {
   NumberedList,
   Underline,
 } from "./icons";
+import { enhanceVideos, plainVideoHtml } from "./player";
 import { Avatar, RoleBadge } from "./ui";
 import { StatusIcon } from "./WorkflowIcon";
 
@@ -172,6 +174,7 @@ export function Editor({
 }: EditorProps) {
   const root = useRef<HTMLDivElement>(null);
   const file = useRef<HTMLInputElement>(null);
+  const dragDepth = useRef(0);
   const saved = useRef<Range | null>(null);
   const formatted = useRef<Element | null>(null);
   const box = useRef<HTMLDivElement>(null);
@@ -187,6 +190,7 @@ export function Editor({
   const [ping, setPing] = useState<{ query: string; pinned?: boolean } | null>(null);
   const [slash, setSlash] = useState<{ query: string; index: number } | null>(null);
   const [emoji, setEmoji] = useState<EmojiMenu | null>(null);
+  const [dropping, setDropping] = useState(false);
   const filled = useRef(false);
   const slashItems = slash ? sectionMatches(slash.query) : [];
 
@@ -196,6 +200,7 @@ export function Editor({
     const el = root.current;
     if (!el || value === "") return;
     el.innerHTML = sanitizeHtml(value);
+    enhanceVideos(el);
     el.classList.toggle("is-empty", isEmptyHtml(el.innerHTML));
   }, [value]);
 
@@ -311,8 +316,16 @@ export function Editor({
 
   function emit() {
     const el = root.current;
-    const html = sanitizeHtml(el?.innerHTML ?? "");
+    if (el) {
+      const videos = [...el.querySelectorAll("video")];
+      videos.forEach((video, index) => {
+        if (index === 0) video.setAttribute("data-lead", "");
+        else video.removeAttribute("data-lead");
+      });
+    }
+    const html = sanitizeHtml(el ? plainVideoHtml(el) : "");
     el?.classList.toggle("is-empty", isEmptyHtml(el.innerHTML));
+    if (el) enhanceVideos(el);
     if (html.length > maxLength) return;
     onChange(isEmptyHtml(html) ? "" : html);
   }
@@ -489,24 +502,77 @@ export function Editor({
     emit();
   }
 
-  async function insertFile(next: File) {
+  async function insertFile(next: File, keepCaret = false) {
+    const video = isVideo(next);
     setError(null);
+    if (video && next.size > LIMITS.videoBytes) {
+      setError("Video is too large (max 32 MB)");
+      return;
+    }
     setBusy(true);
     try {
-      const url = await uploadImage(next);
+      const url = await uploadFile(next);
       root.current?.focus();
-      restore();
-      exec("insertImage", url);
+      if (!keepCaret) restore();
+      if (video) {
+        const lead = !root.current?.querySelector("video");
+        exec(
+          "insertHTML",
+          `<video src="${url}" playsinline preload="metadata" contenteditable="false"${lead ? ' data-lead=""' : ""}></video>`,
+        );
+      } else {
+        exec("insertImage", url);
+      }
       emit();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not upload image");
+      setError(err instanceof Error ? err.message : "Could not upload that file");
     } finally {
       setBusy(false);
     }
   }
 
+  async function insertFiles(files: File[]) {
+    remember();
+    for (let i = 0; i < files.length; i++) {
+      const next = files[i];
+      if (next) await insertFile(next, i > 0);
+    }
+  }
+
+  function dropFiles(event: ReactDragEvent) {
+    const files = [...event.dataTransfer.files].filter(isMedia);
+    dragDepth.current = 0;
+    setDropping(false);
+    if (!event.dataTransfer.types.includes("Files")) return;
+    event.preventDefault();
+    if (files.length === 0) {
+      setError("Use a JPEG, PNG, GIF, MP4, WebM, or MOV");
+      return;
+    }
+    void insertFiles(files);
+  }
+
   return (
-    <div ref={box} className="relative flex flex-col gap-2">
+    <div
+      ref={box}
+      className="relative flex flex-col gap-2"
+      onDragEnter={(event) => {
+        if (!event.dataTransfer.types.includes("Files")) return;
+        event.preventDefault();
+        dragDepth.current += 1;
+        setDropping(true);
+      }}
+      onDragOver={(event) => {
+        if (!event.dataTransfer.types.includes("Files")) return;
+        event.preventDefault();
+        event.dataTransfer.dropEffect = "copy";
+      }}
+      onDragLeave={() => {
+        dragDepth.current = Math.max(0, dragDepth.current - 1);
+        if (dragDepth.current === 0) setDropping(false);
+      }}
+      onDrop={dropFiles}
+    >
       <div className="flex flex-wrap items-center gap-0.5">
         {headings && (
           <Tool
@@ -585,18 +651,19 @@ export function Editor({
             <At />
           </Tool>
         )}
-        <Tool label="Image" onClick={() => file.current?.click()} disabled={busy}>
+        <Tool label="Image or video" onClick={() => file.current?.click()} disabled={busy}>
           <ImageIcon />
         </Tool>
         <input
           ref={file}
           type="file"
-          accept="image/jpeg,image/png,image/gif"
+          accept="image/jpeg,image/png,image/gif,video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov"
+          multiple
           className="hidden"
           onChange={(e) => {
-            const next = e.target.files?.[0];
+            const next = [...(e.target.files ?? [])];
             e.target.value = "";
-            if (next) void insertFile(next);
+            if (next.length) void insertFiles(next);
           }}
         />
       </div>
@@ -673,7 +740,7 @@ export function Editor({
         aria-placeholder={placeholder}
         contentEditable
         data-placeholder={placeholder}
-        className="rich editor is-empty min-h-16 outline-none"
+        className={`rich editor is-empty min-h-16 outline-none ${dropping ? "is-dropping" : ""}`}
         onInput={(e) => {
           typeMarkdown(e.nativeEvent as InputEvent);
           typeEmoji(e.nativeEvent as InputEvent);
@@ -709,11 +776,13 @@ export function Editor({
           emit();
         }}
         onPaste={(e) => {
-          const image = [...e.clipboardData.files].find((f) => f.type.startsWith("image/"));
-          if (image) {
+          const media = [...e.clipboardData.files].find(
+            (item) => item.type.startsWith("image/") || isVideo(item),
+          );
+          if (media) {
             e.preventDefault();
             remember();
-            void insertFile(image);
+            void insertFile(media);
             return;
           }
           const text = e.clipboardData.getData("text/plain");
@@ -864,9 +933,30 @@ export function Editor({
           ))}
         </div>
       )}
+      {dropping && (
+        <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-2xl bg-surface/90 ring-1 ring-fg">
+          <p className="text-[13px] font-medium">Drop an image or video</p>
+        </div>
+      )}
       {error && <p className="text-xs text-rose-500">{error}</p>}
     </div>
   );
+}
+
+function isImage(file: File) {
+  return file.type === "image/jpeg" || file.type === "image/png" || file.type === "image/gif";
+}
+
+function isMedia(file: File) {
+  return isImage(file) || isVideo(file);
+}
+
+function isVideo(file: File) {
+  if (file.type === "video/mp4" || file.type === "video/webm" || file.type === "video/quicktime") {
+    return true;
+  }
+  if (file.type !== "" && file.type !== "application/octet-stream") return false;
+  return /\.(mp4|webm|mov)$/i.test(file.name);
 }
 
 function sectionToneClass(label: string) {

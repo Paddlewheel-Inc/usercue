@@ -250,7 +250,6 @@ export const ImageIcon = (p: P) => (
     <path d="m5 12.5 3.2-3.2 2 2L12.5 9" />
   </Icon>
 );
-
 export const StatusOpen = (p: P) => (
   <Icon {...p}>
     <circle cx="8" cy="8" r="5" />
