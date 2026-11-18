@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+- Add staff-only tasks for planning work next to your feedback. Give a task a status, priority, due date, and health (on track, at risk, or delayed), then name one manager and any number of members.
+- Show tasks under Work in the sidebar, with Mine, Everyone, and Unowned views, quick add, and a My tasks count. Overview lists your open tasks.
+- Mark a task as blocked and record why and which tasks it is waiting on. Blockers clear when the task leaves Blocked, and people waiting on a task are notified when it is done. Circular blockers are rejected.
+- Link tasks to feedback requests so the work stays connected to what people asked for.
+- Leave comments on a task. A comment can also change the task's status or health in the same step, and status changes, blockers, and member changes appear in the activity timeline. Long runs of updates collapse so the timeline stays short.
+- Notify people in the bell when they are added to a task, made its manager, commented on, or when a blocker they were waiting on finishes.
+- Add a Manage tasks permission for deleting tasks and comments that other people wrote. Existing roles that can manage posts get it automatically.
+- Add task endpoints to the public API, documented in `docs/api.md`.
+- Redesign dropdown menus across the app. They are borderless, thinner, and highlight one row at a time. The workflow Stage field now uses the same dropdown as everything else.
+- Add a themed calendar date picker and auto-growing text fields.
+
 ## [1.2.2-rc.2]
 - Add video support to media, drag-and-drop media support
 

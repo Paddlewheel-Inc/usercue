@@ -22,6 +22,7 @@
   --bg: #f3efe8;
   --surface: #fffaf3;
   --hover: #ebe4d8;
+  --raised: #ffffff;
   --line: #e2d8cc;
 
   --fg: #2a241d;
@@ -35,6 +36,7 @@
 
   --shadow: 0 1px 2px rgb(42 36 29 / 0.04), 0 10px 28px -14px rgb(42 36 29 / 0.14);
   --shadow-lg: 0 18px 50px -24px rgb(42 36 29 / 0.22);
+  --shadow-pop: 0 2px 8px rgb(42 36 29 / 0.08), 0 22px 44px -14px rgb(42 36 29 / 0.3);
 }
 
 [data-theme="dark"] {
@@ -43,6 +45,7 @@
   --bg: #050403;
   --surface: #0d0b0a;
   --hover: #171513;
+  --raised: #1b1917;
   --line: #221f1c;
 
   --fg: #f3eee8;
@@ -55,6 +58,7 @@
 
   --shadow: 0 0 0 1px rgb(255 255 255 / 0.03), 0 12px 32px -16px rgb(0 0 0 / 0.7);
   --shadow-lg: 0 0 0 1px rgb(255 255 255 / 0.05), 0 22px 56px -24px rgb(0 0 0 / 0.8);
+  --shadow-pop: 0 4px 14px rgb(0 0 0 / 0.45), 0 28px 56px -14px rgb(0 0 0 / 0.85);
 }
 
 [data-accent="rose"] {
@@ -142,6 +146,7 @@
   --color-bg: var(--bg);
   --color-surface: var(--surface);
   --color-hover: var(--hover);
+  --color-raised: var(--raised);
   --color-line: var(--line);
   --color-fg: var(--fg);
   --color-muted: var(--muted);
@@ -261,6 +266,10 @@
   @apply h-9 w-full rounded-full bg-hover px-3.5 text-[13px] text-fg outline-none transition-[background-color,box-shadow] placeholder:text-faint focus:bg-surface focus:shadow-[var(--shadow)] focus:ring-4 focus:ring-accent/12;
 }
 
+@utility textarea {
+  @apply w-full resize-none rounded-2xl bg-hover px-3.5 py-2.5 text-[13px] leading-6 text-fg outline-none transition-[background-color,box-shadow] placeholder:text-faint focus:bg-surface focus:shadow-[var(--shadow)] focus:ring-4 focus:ring-accent/12;
+}
+
 @utility chip {
   @apply inline-flex h-6 items-center gap-1.5 rounded-full bg-hover px-2.5 text-xs whitespace-nowrap;
 }
@@ -270,11 +279,11 @@
 }
 
 @utility menu {
-  @apply overflow-hidden rounded-2xl bg-surface shadow-[0_0_0_1px_var(--line),var(--shadow-lg)];
+  @apply overflow-hidden rounded-xl bg-raised p-1 shadow-[var(--shadow-pop)];
 }
 
 @utility menu-item {
-  @apply flex h-8 w-full items-center gap-2 px-3 text-left text-[13px] text-muted hover:bg-hover hover:text-fg;
+  @apply flex h-8 w-full items-center gap-2 rounded-lg px-2.5 text-left text-[13px] text-fg/75 transition-colors hover:bg-fg/[0.06] hover:text-fg;
 }
 
 @utility lift {

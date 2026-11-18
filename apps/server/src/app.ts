@@ -16,6 +16,7 @@ import { people } from "./routes/people";
 import { posts } from "./routes/posts";
 import { settings } from "./routes/settings";
 import { tags } from "./routes/tags";
+import { tasks } from "./routes/tasks";
 import { triage } from "./routes/triage";
 import { uploads } from "./routes/uploads";
 import { views } from "./routes/views";
@@ -32,6 +33,7 @@ const publicApi = new Hono<AppEnv>()
   .route("/settings", settings)
   .route("/integrations", integrations)
   .route("/changelog", changelog)
+  .route("/tasks", tasks)
   .route("/auth", oauthProviders)
   .get("/me", (c) => {
     const user = c.get("user");
@@ -48,6 +50,7 @@ const api = new Hono<AppEnv>()
   .route("/posts", triage)
   .route("/posts", posts)
   .route("/changelog", changelog)
+  .route("/tasks", tasks)
   .route("/notifications", notifications)
   .route("/people", people)
   .route("/og", og)

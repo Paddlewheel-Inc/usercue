@@ -2,7 +2,12 @@ import { PERMISSIONS, type Permission } from "@usercue/shared";
 import { db } from "./db";
 
 const OWNER_PERMS = PERMISSIONS.slice();
-const STAFF_PERMS = ["dashboard", "manage_posts", "manage_boards"] satisfies Permission[];
+const STAFF_PERMS = [
+  "dashboard",
+  "manage_posts",
+  "manage_boards",
+  "manage_tasks",
+] satisfies Permission[];
 
 const insertRole = db.query<{ id: number }>(
   "INSERT INTO roles (name, key, locked, permissions) VALUES (?, ?, ?, ?) RETURNING id",

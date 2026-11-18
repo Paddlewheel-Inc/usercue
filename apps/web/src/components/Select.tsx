@@ -1,18 +1,22 @@
-import { type KeyboardEvent, useEffect, useId, useRef, useState } from "react";
+import { type KeyboardEvent, type ReactNode, useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Check, ChevronDown } from "./icons";
+
+const MIN_MENU_WIDTH = 160;
 
 export function Select<T extends string>({
   label,
   value,
   options,
   disabled = false,
+  quiet = false,
   onChange,
 }: {
   label: string;
   value: T;
-  options: readonly { value: T; label: string }[];
+  options: readonly { value: T; label: string; icon?: ReactNode }[];
   disabled?: boolean;
+  quiet?: boolean;
   onChange: (value: T) => void;
 }) {
   const id = useId();
@@ -39,12 +43,12 @@ export function Select<T extends string>({
   function show(index = selected) {
     if (disabled || !trigger.current || options.length === 0) return;
     const rect = trigger.current.getBoundingClientRect();
-    const height = Math.min(options.length * 32 + 8, 240);
+    const height = Math.min(options.length * 32 + 8, 264);
     const below = window.innerHeight - rect.bottom - 16;
     const above = rect.top - 16;
     const upwards = below < height && above > below;
     const maxHeight = Math.max(32, Math.min(height, upwards ? above : below));
-    const width = Math.min(rect.width, window.innerWidth - 16);
+    const width = Math.min(Math.max(rect.width, MIN_MENU_WIDTH), window.innerWidth - 16);
     setActive(index);
     setPosition({
       left: Math.max(8, Math.min(rect.left, window.innerWidth - width - 8)),
@@ -104,7 +108,11 @@ export function Select<T extends string>({
       <button
         ref={trigger}
         type="button"
-        className="input inline-flex items-center justify-between gap-2 text-left disabled:cursor-default disabled:opacity-50"
+        className={`${
+          quiet
+            ? `group inline-flex h-8 w-full items-center justify-between gap-2 rounded-xl px-2 text-left text-[13px] transition-colors hover:bg-fg/[0.06] ${open ? "bg-fg/[0.06]" : ""}`
+            : "input inline-flex items-center justify-between gap-2 text-left"
+        } disabled:cursor-default disabled:opacity-50`}
         aria-label={label}
         aria-haspopup="listbox"
         aria-expanded={open}
@@ -118,9 +126,12 @@ export function Select<T extends string>({
           }
         }}
       >
-        <span className="min-w-0 truncate">{options[selected]?.label}</span>
+        <span className="flex min-w-0 items-center gap-2">
+          {options[selected]?.icon}
+          <span className="min-w-0 truncate">{options[selected]?.label}</span>
+        </span>
         <ChevronDown
-          className={`shrink-0 text-faint transition-transform ${open ? "rotate-180" : ""}`}
+          className={`shrink-0 text-faint transition-transform ${quiet && !open ? "opacity-0 group-hover:opacity-100" : ""} ${open ? "rotate-180" : ""}`}
           width={12}
           height={12}
         />
@@ -134,7 +145,7 @@ export function Select<T extends string>({
             role="listbox"
             aria-label={label}
             onKeyDown={onKeyDown}
-            className="menu fixed z-50 animate-rise overflow-y-auto p-1"
+            className="menu fixed z-50 flex animate-rise flex-col overflow-y-auto"
             style={position}
           >
             {options.map((option, index) => (
@@ -144,16 +155,20 @@ export function Select<T extends string>({
                 role="option"
                 tabIndex={-1}
                 aria-selected={option.value === value}
-                className={`menu-item rounded-xl outline-none focus:bg-hover focus:text-fg ${active === index ? "bg-hover text-fg" : ""}`}
+                className={`menu-item shrink-0 outline-none ${
+                  option.value === value ? "font-medium text-fg" : ""
+                } ${active === index ? "bg-fg/[0.06] text-fg" : ""}`}
                 onFocus={() => setActive(index)}
+                onMouseMove={() => active !== index && setActive(index)}
                 onClick={() => {
                   onChange(option.value);
                   close(true);
                 }}
               >
+                {option.icon}
                 <span className="min-w-0 flex-1 truncate">{option.label}</span>
                 {option.value === value && (
-                  <Check width={12} height={12} className="shrink-0 text-accent-text" />
+                  <Check width={13} height={13} className="shrink-0 text-accent-text" />
                 )}
               </button>
             ))}

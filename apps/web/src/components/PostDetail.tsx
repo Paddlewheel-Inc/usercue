@@ -408,7 +408,7 @@ function PostActions({
           {open && (
             <div
               role="menu"
-              className="absolute right-0 z-30 mt-2 w-52 origin-top-right animate-rise overflow-hidden rounded-2xl bg-bg shadow-[0_0_0_1px_var(--line),var(--shadow)]"
+              className="absolute right-0 z-30 mt-2 w-52 origin-top-right animate-rise overflow-hidden rounded-xl bg-raised shadow-[var(--shadow-pop)]"
             >
               <div className="px-2.5 pt-2.5 pb-1.5">
                 <p className="px-2 pb-1.5 text-[10px] font-medium tracking-wide text-faint uppercase">
@@ -423,8 +423,10 @@ function PostActions({
                         key={item}
                         type="button"
                         role="menuitem"
-                        className={`flex h-8 w-full items-center gap-2.5 rounded-xl px-2 text-[13px] transition-colors ${
-                          selected ? "bg-hover text-fg" : "text-muted hover:bg-hover hover:text-fg"
+                        className={`flex h-8 w-full items-center gap-2.5 rounded-lg px-2 text-[13px] transition-colors ${
+                          selected
+                            ? "bg-fg/[0.06] text-fg"
+                            : "text-fg/75 hover:bg-fg/[0.06] hover:text-fg"
                         }`}
                         onClick={() => {
                           onStatus(item);
@@ -454,10 +456,10 @@ function PostActions({
                           key={item.slug}
                           type="button"
                           role="menuitem"
-                          className={`flex h-8 w-full items-center gap-2.5 rounded-xl px-2 text-[13px] transition-colors ${
+                          className={`flex h-8 w-full items-center gap-2.5 rounded-lg px-2 text-[13px] transition-colors ${
                             selected
-                              ? "bg-hover text-fg"
-                              : "text-muted hover:bg-hover hover:text-fg"
+                              ? "bg-fg/[0.06] text-fg"
+                              : "text-fg/75 hover:bg-fg/[0.06] hover:text-fg"
                           }`}
                           onClick={() => {
                             setOpen(false);
@@ -476,7 +478,7 @@ function PostActions({
                 <button
                   type="button"
                   role="menuitem"
-                  className="flex h-8 w-full items-center gap-2.5 rounded-xl px-2 text-[13px] text-muted transition-colors hover:bg-hover hover:text-fg"
+                  className="flex h-8 w-full items-center gap-2.5 rounded-lg px-2 text-[13px] text-fg/75 transition-colors hover:bg-fg/[0.06] hover:text-fg"
                   onClick={() => {
                     setOpen(false);
                     onMerge();
@@ -487,7 +489,7 @@ function PostActions({
                 <button
                   type="button"
                   role="menuitem"
-                  className="flex h-8 w-full items-center gap-2.5 rounded-xl px-2 text-[13px] text-rose-400 transition-colors hover:bg-rose-500/10 hover:text-rose-300"
+                  className="flex h-8 w-full items-center gap-2.5 rounded-lg px-2 text-[13px] text-rose-400 transition-colors hover:bg-rose-500/10 hover:text-rose-300"
                   onClick={() => {
                     setOpen(false);
                     onDelete();
@@ -701,7 +703,7 @@ function PostTags({
         <div className="relative" ref={ref}>
           <button
             type="button"
-            className="inline-flex h-6 items-center gap-1 rounded-full px-2 text-[11px] font-medium text-muted transition-colors hover:bg-hover hover:text-fg"
+            className="inline-flex h-6 items-center gap-1 rounded-full px-2 text-[11px] font-medium text-fg/75 transition-colors hover:bg-fg/[0.06] hover:text-fg"
             aria-expanded={open}
             aria-haspopup="menu"
             onClick={() => setOpen((value) => !value)}

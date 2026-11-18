@@ -16,6 +16,7 @@ import { JoinPage } from "./pages/Join";
 import { PostPage } from "./pages/Post";
 import { Roadmap } from "./pages/Roadmap";
 import { Settings } from "./pages/Settings";
+import { Tasks } from "./pages/Tasks";
 
 const Public = ({ children, wide }: { children: ReactNode; wide?: boolean }) => (
   <PublicLayout wide={wide}>{children}</PublicLayout>
@@ -94,6 +95,9 @@ export function App() {
       </Route>
       <Route path="/admin/settings/:tab?">
         {me.user?.staff ? <Settings /> : me.user ? <Redirect to="/" /> : <Redirect to="/login" />}
+      </Route>
+      <Route path="/admin/tasks/:id?">
+        {me.user?.staff ? <Tasks /> : me.user ? <Redirect to="/" /> : <Redirect to="/login" />}
       </Route>
       <Route path="/admin/requests/:id?">
         {me.user?.staff ? <Admin /> : me.user ? <Redirect to="/" /> : <Redirect to="/login" />}

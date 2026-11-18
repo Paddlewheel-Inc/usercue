@@ -151,6 +151,12 @@ export function NotificationBell({ placement = "down" }: { placement?: "down" | 
                               <span className="font-medium">{item.title}</span>
                               <span className="text-muted"> is now {item.excerpt}</span>
                             </>
+                          ) : item.kind === "task" ? (
+                            <>
+                              <span className="font-medium">{item.actorName}</span>
+                              <span className="text-muted"> {item.excerpt} </span>
+                              <span className="font-medium">{item.title}</span>
+                            </>
                           ) : (
                             <>
                               <span className="font-medium">{item.actorName}</span>
@@ -171,7 +177,7 @@ export function NotificationBell({ placement = "down" }: { placement?: "down" | 
                             </>
                           )}
                         </span>
-                        {item.kind !== "shipped" && item.excerpt && (
+                        {item.kind !== "shipped" && item.kind !== "task" && item.excerpt && (
                           <span className="mt-0.5 line-clamp-2 block text-[12px] leading-4 text-muted">
                             {item.excerpt}
                           </span>

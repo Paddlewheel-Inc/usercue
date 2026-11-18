@@ -4,10 +4,12 @@ import { Link } from "wouter";
 import { ArrowUp, Comment, Heart } from "../components/icons";
 import { Avatar, TagChip } from "../components/ui";
 import { StatusIcon, StatusName } from "../components/WorkflowIcon";
+import { TaskRow } from "../components/work";
 import type { Post } from "../lib/api";
 import { excerpt, timeAgo } from "../lib/format";
 import { can, useCounts, useMe, usePosts, useWorkspaceUsers } from "../lib/queries";
 import { useWorkflow } from "../lib/workflow";
+import { useTasks } from "../lib/workQueries";
 import { AdminShell } from "./Admin";
 
 const today = new Intl.DateTimeFormat("en", {
@@ -124,6 +126,7 @@ function DashboardHome() {
           </div>
 
           <div className="flex min-w-0 flex-col gap-8">
+            <YourTasks />
             {me?.user && <Yours userId={me.user.id} />}
 
             <Panel
@@ -294,6 +297,27 @@ function Pipeline({ counts, total }: { counts: Record<Status, number>; total: nu
         })}
       </div>
     </div>
+  );
+}
+
+function YourTasks() {
+  const { data } = useTasks({ person: "me", status: "open" });
+  const tasks = (data ?? []).slice(0, 5);
+  if (tasks.length === 0) return null;
+
+  return (
+    <Panel
+      title="Your tasks"
+      hint={`${data?.length ?? 0} open, soonest due first.`}
+      href="/admin/tasks"
+      action="See all"
+    >
+      <div className="card flex flex-col p-1.5">
+        {tasks.map((task) => (
+          <TaskRow key={task.id} task={task} />
+        ))}
+      </div>
+    </Panel>
   );
 }
 

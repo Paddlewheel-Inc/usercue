@@ -17,6 +17,7 @@ import {
   Plus,
   Roadmap,
   Search,
+  Tasks,
   Trash,
 } from "../components/icons";
 import { NotificationBell } from "../components/NotificationBell";
@@ -42,6 +43,9 @@ import {
   useSavedViews,
 } from "../lib/queries";
 import { useWorkflow } from "../lib/workflow";
+import { useTasks } from "../lib/workQueries";
+
+export type WorkArea = "tasks";
 
 const href = filterHref;
 
@@ -98,16 +102,20 @@ function Sidebar({
   filter,
   settings = false,
   dashboard = false,
+  work,
   open = false,
   onClose,
 }: {
   filter: Filter;
   settings?: boolean;
   dashboard?: boolean;
+  work?: WorkArea;
   open?: boolean;
   onClose?: () => void;
 }) {
   const { data: me } = useMe();
+  const { data: mine } = useTasks({ person: "me", status: "open" });
+  const away = dashboard || settings || Boolean(work);
   const { data: boards = [] } = useBoards();
   const { statuses } = useWorkflow();
   const { data: counts } = useCounts(filter.board);
@@ -117,7 +125,7 @@ function Sidebar({
   const { data: views = [] } = useSavedViews();
   const activeQuery = filterQuery(filter);
   const activeView = views.find((view) => view.query === activeQuery);
-  const allActive = !dashboard && !settings && !filter.status && !activeView && !activeQuery;
+  const allActive = !away && !filter.status && !activeView && !activeQuery;
 
   useEffect(() => {
     if (!open) return;
@@ -151,6 +159,12 @@ function Sidebar({
           Overview
         </SidebarLink>
 
+        <Section title="Work">
+          <SidebarLink to="/admin/tasks" active={work === "tasks"} count={mine?.length ?? 0}>
+            <Tasks className={work === "tasks" ? "text-accent" : "text-faint"} /> My tasks
+          </SidebarLink>
+        </Section>
+
         <Section title="The pile">
           <SidebarLink to={href({ board: filter.board })} active={allActive} count={total}>
             <Inbox className={allActive ? "text-accent" : "text-faint"} /> All
@@ -158,7 +172,7 @@ function Sidebar({
           {statuses.map((item) => {
             const status = item.id;
             const n = counts?.[status] ?? 0;
-            const on = !dashboard && !settings && filter.status === status;
+            const on = !away && filter.status === status;
             return (
               <SidebarLink
                 key={status}
@@ -173,9 +187,9 @@ function Sidebar({
           })}
         </Section>
 
-        <ViewsNav views={views} activeId={dashboard || settings ? undefined : activeView?.id} />
+        <ViewsNav views={views} activeId={away ? undefined : activeView?.id} />
 
-        <BoardsNav filter={filter} boards={boards} muted={dashboard || settings} />
+        <BoardsNav filter={filter} boards={boards} muted={away} />
 
         <Section title="The shop">
           <SidebarLink to="/roadmap" active={false}>
@@ -491,10 +505,12 @@ export function AdminShell({
   children,
   settings = false,
   dashboard = false,
+  work,
 }: {
   children: ReactNode;
   settings?: boolean;
   dashboard?: boolean;
+  work?: WorkArea;
 }) {
   const filter = parseFilter(useSearch());
   const [location] = useLocation();
@@ -533,6 +549,7 @@ export function AdminShell({
           filter={filter}
           settings={settings}
           dashboard={dashboard}
+          work={work}
           open={navOpen}
           onClose={() => setNavOpen(false)}
         />

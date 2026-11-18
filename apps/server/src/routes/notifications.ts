@@ -39,7 +39,7 @@ const markAll = db.query(
 );
 
 function notificationKind(kind: string) {
-  if (kind === "role" || kind === "shipped") return kind;
+  if (kind === "role" || kind === "shipped" || kind === "task") return kind;
   return "mention";
 }
 

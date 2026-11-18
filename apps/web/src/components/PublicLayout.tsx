@@ -241,7 +241,7 @@ function AccountMenu() {
       {open && (
         <div
           role="menu"
-          className="absolute top-full left-1/2 z-30 mt-3.5 w-52 origin-top -translate-x-1/2 animate-rise overflow-hidden rounded-2xl bg-bg shadow-[0_0_0_1px_var(--line),var(--shadow)]"
+          className="absolute top-full left-1/2 z-30 mt-3.5 w-52 origin-top -translate-x-1/2 animate-rise overflow-hidden rounded-xl bg-raised shadow-[var(--shadow-pop)]"
         >
           <div className="px-3 pt-3 pb-2.5 text-center">
             <p className="truncate text-[12px] font-medium tracking-tight text-fg">{user.name}</p>
@@ -319,14 +319,14 @@ export function PublicLayout({ children, wide = false }: { children: ReactNode; 
           ) : (
             <Link
               href="/signin"
-              className="hidden h-7 shrink-0 items-center whitespace-nowrap rounded-full px-3 text-[13px] text-muted transition-colors hover:bg-hover hover:text-fg sm:inline-flex"
+              className="hidden h-7 shrink-0 items-center whitespace-nowrap rounded-full px-3 text-[13px] text-fg/75 transition-colors hover:bg-fg/[0.06] hover:text-fg sm:inline-flex"
             >
               Sign in
             </Link>
           )}
           <button
             type="button"
-            className="inline-flex size-8 shrink-0 items-center justify-center rounded-full text-muted transition-colors hover:bg-hover hover:text-fg sm:hidden"
+            className="inline-flex size-8 shrink-0 items-center justify-center rounded-full text-fg/75 transition-colors hover:bg-fg/[0.06] hover:text-fg sm:hidden"
             aria-label={menuOpen ? "Close menu" : "Open menu"}
             aria-expanded={menuOpen}
             onClick={() => setMenuOpen((value) => !value)}

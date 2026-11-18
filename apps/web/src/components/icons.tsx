@@ -90,6 +90,23 @@ export const Roadmap = (p: P) => (
     <path d="M6 4v7.5M10 5.5V13" />
   </Icon>
 );
+export const Tasks = (p: P) => (
+  <Icon {...p}>
+    <circle cx="8" cy="8" r="5.5" />
+    <path d="m5.6 8.2 1.7 1.7 3.2-3.5" />
+  </Icon>
+);
+export const Calendar = (p: P) => (
+  <Icon {...p}>
+    <rect x="2.5" y="3.5" width="11" height="10" rx="2" />
+    <path d="M2.5 6.8h11M5.5 2v3M10.5 2v3" />
+  </Icon>
+);
+export const ChevronRight = (p: P) => (
+  <Icon {...p}>
+    <path d="m6 4 4 4-4 4" />
+  </Icon>
+);
 export const Globe = (p: P) => (
   <Icon {...p}>
     <circle cx="8" cy="8" r="5.5" />

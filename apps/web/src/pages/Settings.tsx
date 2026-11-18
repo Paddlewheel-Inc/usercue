@@ -1136,7 +1136,7 @@ function Menu({
       {open && (
         <div
           role="menu"
-          className={`absolute z-30 mt-2 min-w-48 origin-top animate-rise overflow-hidden rounded-2xl bg-bg shadow-[0_0_0_1px_var(--line),var(--shadow)] ${
+          className={`absolute z-30 mt-2 min-w-48 origin-top animate-rise overflow-hidden rounded-xl bg-raised shadow-[var(--shadow-pop)] ${
             align === "right" ? "right-0 origin-top-right" : "left-0 origin-top-left"
           }`}
         >
@@ -1217,8 +1217,10 @@ function RolePicker({
                   key={role.id}
                   type="button"
                   role="menuitem"
-                  className={`flex h-8 w-full items-center gap-2.5 rounded-xl px-2 text-[13px] transition-colors ${
-                    selected ? "bg-hover text-fg" : "text-muted hover:bg-hover hover:text-fg"
+                  className={`flex h-8 w-full items-center gap-2.5 rounded-lg px-2 text-[13px] transition-colors ${
+                    selected
+                      ? "bg-fg/[0.06] text-fg"
+                      : "text-fg/75 hover:bg-fg/[0.06] hover:text-fg"
                   }`}
                   onClick={() => {
                     onSelect(role.id);
@@ -1272,7 +1274,7 @@ function UserMore({
           <button
             type="button"
             role="menuitem"
-            className="flex h-8 w-full items-center rounded-xl px-2.5 text-[13px] text-muted transition-colors hover:bg-hover hover:text-fg"
+            className="flex h-8 w-full items-center rounded-lg px-2.5 text-[13px] text-fg/75 transition-colors hover:bg-fg/[0.06] hover:text-fg"
             onClick={() => {
               close();
               onSuspend();
@@ -1283,7 +1285,7 @@ function UserMore({
           <button
             type="button"
             role="menuitem"
-            className="flex h-8 w-full items-center gap-2 rounded-xl px-2.5 text-[13px] text-rose-400 transition-colors hover:bg-rose-500/10 hover:text-rose-300"
+            className="flex h-8 w-full items-center gap-2 rounded-lg px-2.5 text-[13px] text-rose-400 transition-colors hover:bg-rose-500/10 hover:text-rose-300"
             onClick={() => {
               close();
               onDelete();

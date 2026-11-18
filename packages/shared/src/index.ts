@@ -7,6 +7,7 @@ export * from "./importing";
 export * from "./markdown";
 export * from "./priority";
 export * from "./similar";
+export * from "./tasks";
 export * from "./views";
 export * from "./webhooks";
 export * from "./workflow";
@@ -137,6 +138,7 @@ export const PERMISSIONS = [
   "dashboard",
   "manage_posts",
   "manage_boards",
+  "manage_tasks",
   "manage_settings",
   "manage_branding",
   "manage_users",
@@ -157,6 +159,10 @@ export const PERMISSION_META: Record<Permission, { label: string; description: s
   manage_boards: {
     label: "Manage boards",
     description: "Create and rename feedback boards.",
+  },
+  manage_tasks: {
+    label: "Manage tasks",
+    description: "Delete tasks and task comments that other people wrote.",
   },
   manage_settings: {
     label: "Workspace settings",

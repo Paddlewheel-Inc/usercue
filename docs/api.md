@@ -18,6 +18,8 @@ A key can only do what its permissions allow. `GET /api/v1/me` returns the key's
 | `POST /api/v1/posts/:id/merge` | `manage_posts` | Merge into `{ "targetId": 12 }`. Votes and comments move over. |
 | `GET /api/v1/posts/similar?q=` | none | Posts that look like the text you pass. |
 | `GET /api/v1/changelog` | none | Published changelog entries. |
+| `GET /api/v1/tasks` | `dashboard` | Staff-only tasks. Filters: `person` (`me`, `none`, or an ID), `status` (including `open`). |
+| `POST /api/v1/tasks` | `dashboard` | Create a task. `PATCH /api/v1/tasks/:id` changes status, priority, manager, due date, or blocked reason. `PUT /api/v1/tasks/:id/blockers/:blockerId` marks a task as waiting on another. `PUT /api/v1/tasks/:id/members/:userId` adds a member. |
 | `GET/POST /api/v1/integrations/webhooks` | `manage_settings` | List or create webhooks. |
 
 ## Webhooks

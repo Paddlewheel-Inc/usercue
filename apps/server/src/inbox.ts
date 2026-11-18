@@ -4,7 +4,7 @@ const KEEP_PER_USER = 100;
 
 export interface NewNotification {
   userId: number;
-  kind: "mention" | "role" | "shipped";
+  kind: "mention" | "role" | "shipped" | "task";
   actorName?: string;
   actorAvatar?: string;
   roleName?: string;

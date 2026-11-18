@@ -8,6 +8,7 @@ import {
 } from "@usercue/shared";
 import { type FormEvent, useState } from "react";
 import { Check, Plus } from "../components/icons";
+import { Select } from "../components/Select";
 import { ErrorText } from "../components/ui";
 import { WorkflowGlyph } from "../components/WorkflowIcon";
 import { useSaveWorkflow, useWorkflow } from "../lib/workflow";
@@ -106,24 +107,19 @@ function StatusEditor({ status, onClose }: { status?: WorkflowStatus; onClose: (
         </div>
       </fieldset>
       {!status && (
-        <label className="flex flex-col gap-1.5">
+        <div className="flex flex-col gap-1.5">
           <span className="text-[11px] text-muted">Stage</span>
-          <select
-            className="input"
+          <Select
+            label="Stage"
             value={category}
-            onChange={(e) => setCategory(e.target.value as WorkflowStatus["category"])}
-          >
-            {STATUSES.map((item) => (
-              <option key={item} value={item}>
-                {STATUS_LABELS[item]}
-              </option>
-            ))}
-          </select>
+            options={STATUSES.map((item) => ({ value: item, label: STATUS_LABELS[item] ?? item }))}
+            onChange={setCategory}
+          />
           <span className="text-[11px] text-muted">
             Groups this status on the roadmap. Planned statuses also follow your assignment
             settings.
           </span>
-        </label>
+        </div>
       )}
       <ErrorText error={save.error} />
       <div className="flex justify-end gap-2">
