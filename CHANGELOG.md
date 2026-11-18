@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [1.2.4]
+
 - Add staff-only tasks for planning work next to your feedback. Give a task a status, priority, due date, and health (on track, at risk, or delayed), then name one manager and any number of members.
 - Show tasks under Work in the sidebar, with Mine, Everyone, and Unowned views, quick add, and a My tasks count. Overview lists your open tasks.
 - Mark a task as blocked and record why and which tasks it is waiting on. Blockers clear when the task leaves Blocked, and people waiting on a task are notified when it is done. Circular blockers are rejected.
