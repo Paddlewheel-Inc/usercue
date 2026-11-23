@@ -11,7 +11,6 @@ export function Captcha({ onVerify }: CaptchaProps) {
 
   if (!siteKey) {
     return null;
-    //siteKey = "123321";
   }
 
   return (
