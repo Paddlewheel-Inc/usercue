@@ -1,6 +1,7 @@
 import { type ReactNode, useEffect } from "react";
 import { Redirect, Route, Switch } from "wouter";
 import { PublicLayout } from "./components/PublicLayout";
+import { Captcha } from "./components/Captcha";
 import { applyAccent } from "./lib/accent";
 import { useMe } from "./lib/queries";
 import { applySite } from "./lib/site";

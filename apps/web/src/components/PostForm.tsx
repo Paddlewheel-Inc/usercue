@@ -7,6 +7,7 @@ import { Editor } from "./Editor";
 import { OAuthButtons } from "./OAuthButtons";
 import { SimilarPosts } from "./SimilarPosts";
 import { ErrorText } from "./ui";
+import { Captcha, isCaptchaEnabled } from "./Captcha";
 
 export function PostForm({ board, defaultOpen = false }: { board: string; defaultOpen?: boolean }) {
   const { data: me } = useMe();
@@ -20,6 +21,7 @@ export function PostForm({ board, defaultOpen = false }: { board: string; defaul
   const [body, setBody] = useState("");
   const [name, setName] = useState(getSavedName);
   const [tagIds, setTagIds] = useState<number[]>([]);
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
 
   const user = me?.user;
   const identity = me?.identity;
@@ -29,7 +31,11 @@ export function PostForm({ board, defaultOpen = false }: { board: string; defaul
   const canSignInHere = Boolean(methods?.providers.length) && !isEmbedded();
   const suspended = Boolean(user?.suspended);
   const needsTag = requireTags && tagIds.length === 0;
-  const canPost = !mustSignIn && !suspended && !needsTag;
+  const canPost =
+    !mustSignIn &&
+    !suspended &&
+    !needsTag &&
+    (!isCaptchaEnabled || Boolean(captchaToken));
 
   function toggleTag(id: number) {
     setTagIds((current) => {
@@ -51,6 +57,7 @@ export function PostForm({ board, defaultOpen = false }: { board: string; defaul
           setTitle("");
           setBody("");
           setTagIds([]);
+          setCaptchaToken(null);
           setOpen(false);
         },
       },
@@ -134,6 +141,7 @@ export function PostForm({ board, defaultOpen = false }: { board: string; defaul
             {suspended && <p className="text-xs text-rose-500">Your account has been suspended.</p>}
             <ErrorText error={create.error} />
             <div className="flex-1" />
+            <Captcha onVerify={setCaptchaToken} />
             <button type="button" className="btn-quiet" onClick={() => setOpen(false)}>
               Cancel
             </button>
