@@ -1,34 +1,36 @@
 import { type FormEvent, useEffect, useState } from "react";
 import { SectionHead } from "../../components/SectionHead";
-import { Checkbox, useToast } from "../../components/ui";
-import { useSaveSettings, useSettings } from "../../lib/queries";
+import { Checkbox, ErrorText, useToast } from "../../components/ui";
+import { timeAgo } from "../../lib/format";
+import { useMe, useSaveSettings, useSettings, useTestEmail } from "../../lib/queries";
 
 export function EmailSettings() {
   return (
     <div className="flex flex-col gap-6">
       <SectionHead title="Email delivery">
-        Staff invites, the weekly digest, and shipped alerts go out by email. Pick Resend or your
+        Staff invites, the weekly digest, and shipped alerts go out by email. Pick Postbound or your
         own SMTP server.
       </SectionHead>
-      <ResendSettings />
+      <PostboundSettings />
       <SmtpSettings />
+      <TestEmail />
     </div>
   );
 }
 
-function ResendSettings() {
+function PostboundSettings() {
   const { data } = useSettings();
   const save = useSaveSettings();
   const toast = useToast();
-  const [from, setFrom] = useState(data?.resend.from ?? "");
+  const [from, setFrom] = useState(data?.postbound.from ?? "");
   const [apiKey, setApiKey] = useState("");
-  const [enabled, setEnabled] = useState(Boolean(data?.resend.enabled));
+  const [enabled, setEnabled] = useState(Boolean(data?.postbound.enabled));
 
   useEffect(() => {
     if (!data) return;
-    setFrom(data.resend.from ?? "");
+    setFrom(data.postbound.from ?? "");
     setApiKey("");
-    setEnabled(data.resend.enabled);
+    setEnabled(data.postbound.enabled);
   }, [data]);
 
   if (!data) return null;
@@ -37,12 +39,12 @@ function ResendSettings() {
     e.preventDefault();
     save.mutate(
       {
-        resendFrom: from,
-        resendApiKey: apiKey.trim() || undefined,
-        resendEnabled: enabled,
+        postboundFrom: from,
+        postboundApiKey: apiKey.trim() || undefined,
+        postboundEnabled: enabled,
       },
       {
-        onSuccess: () => toast({ message: "Resend settings saved." }),
+        onSuccess: () => toast({ message: "Postbound settings saved." }),
         onError: (error) => toast({ message: error.message, tone: "error" }),
       },
     );
@@ -50,8 +52,8 @@ function ResendSettings() {
 
   return (
     <form onSubmit={submit} className="flex flex-col gap-3">
-      <SectionHead title="Resend">
-        Send invites, the weekly digest, and shipped alerts through Resend. Add an API key and a
+      <SectionHead title="Postbound">
+        Send invites, the weekly digest, and shipped alerts through Postbound. Add an API key and a
         from address. The key is hashed and encrypted. We never show it again.
       </SectionHead>
       <label className="flex flex-col gap-1.5">
@@ -75,17 +77,17 @@ function ResendSettings() {
           autoComplete="new-password"
           spellCheck={false}
           placeholder={
-            data.resend.keyHash || data.resend.fromEnv
+            data.postbound.keyHash || data.postbound.fromEnv
               ? "Leave blank to keep the current key"
-              : "re_…"
+              : "pb_…"
           }
         />
-        {!data.resend.keyHash && data.resend.fromEnv && (
+        {!data.postbound.keyHash && data.postbound.fromEnv && (
           <p className="px-1 text-[11px] text-faint">Using the key from the environment.</p>
         )}
       </label>
       <Checkbox checked={enabled} onChange={setEnabled}>
-        Send email with Resend
+        Send email with Postbound
       </Checkbox>
       <div className="flex items-center gap-2">
         <div className="flex-1" />
@@ -224,5 +226,59 @@ function SmtpSettings() {
         </button>
       </div>
     </form>
+  );
+}
+
+function TestEmail() {
+  const { data: me } = useMe();
+  const { data } = useSettings();
+  const test = useTestEmail();
+  const toast = useToast();
+
+  if (!data) return null;
+  const last = data.emailTest;
+
+  function send() {
+    test.mutate(undefined, {
+      onSuccess: () => toast({ message: `Test email sent to ${me?.user?.email}.` }),
+      onError: (error) => toast({ message: error.message, tone: "error" }),
+    });
+  }
+
+  return (
+    <div className="flex flex-col gap-3">
+      <SectionHead title="Test email">
+        Send a test message to {me?.user?.email || "your account email"} using the email provider
+        that is turned on.
+      </SectionHead>
+      {!data.postbound.enabled && !data.smtp.enabled && (
+        <p className="px-1 text-[12px] text-muted">Turn on Postbound or SMTP first.</p>
+      )}
+      {last && (
+        <p className="flex items-start gap-2 px-1 text-[12px] leading-5 text-muted">
+          <span
+            aria-hidden
+            className={`mt-1.5 size-1.5 shrink-0 rounded-full ${
+              last.ok ? "bg-emerald-500" : "bg-rose-500"
+            }`}
+          />
+          {last.ok
+            ? `Sent to ${last.to} ${timeAgo(last.at)}.`
+            : `Failed: ${last.message} ${timeAgo(last.at)}.`}
+        </p>
+      )}
+      <ErrorText error={test.error} />
+      <div className="flex items-center gap-2">
+        <div className="flex-1" />
+        <button
+          type="button"
+          className="btn-primary"
+          disabled={test.isPending || !me?.user?.email}
+          onClick={send}
+        >
+          {test.isPending ? "Sending…" : "Send test email"}
+        </button>
+      </div>
+    </div>
   );
 }

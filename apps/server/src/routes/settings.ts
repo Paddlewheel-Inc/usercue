@@ -19,12 +19,15 @@ import { env } from "../env";
 import { inboundActivity } from "../inbound";
 import {
   emailEnabled,
-  resendConfigured,
-  resendCredentials,
-  resendEnabled,
+  emailTestActivity,
+  noteEmailTest,
+  postboundConfigured,
+  postboundCredentials,
+  postboundEnabled,
+  sendEmail,
   sendInviteEmail,
 } from "../mail";
-import { type AppEnv, randomToken, requirePermission, requireTeam } from "../middleware";
+import { type AppEnv, randomToken, rateLimit, requirePermission, requireTeam } from "../middleware";
 import {
   discordConfigured,
   isDiscordWebhook,
@@ -285,7 +288,7 @@ function serializeRole(row: RoleRow, userCount = 0) {
 
 async function snapshot(origin: string, includeStaff: boolean) {
   const workspace = await getWorkspace();
-  const creds = await resendCredentials();
+  const creds = await postboundCredentials();
   const now = Math.floor(Date.now() / 1000);
   return {
     allowGuestFeedback: workspace.allow_guest_feedback === 1,
@@ -301,13 +304,14 @@ async function snapshot(origin: string, includeStaff: boolean) {
     siteDescription: workspace.site_description.trim() || null,
     faviconUrl: workspace.favicon_url.trim() || null,
     shareImageUrl: workspace.share_image_url.trim() || null,
-    resend: {
-      configured: await resendConfigured(),
-      enabled: await resendEnabled(),
-      from: workspace.resend_from || env.resendFrom || null,
-      keyHash: workspace.resend_key_hash ? workspace.resend_key_hash.slice(0, 12) : null,
-      fromEnv: Boolean(!workspace.resend_key_cipher && creds),
+    postbound: {
+      configured: await postboundConfigured(),
+      enabled: await postboundEnabled(),
+      from: workspace.postbound_from || env.postboundFrom || null,
+      keyHash: workspace.postbound_key_hash ? workspace.postbound_key_hash.slice(0, 12) : null,
+      fromEnv: Boolean(!workspace.postbound_key_cipher && creds),
     },
+    emailTest: emailTestActivity(),
     smtp: {
       configured: await smtpConfigured(),
       enabled: workspace.smtp_enabled === 1,
@@ -347,8 +351,8 @@ async function snapshot(origin: string, includeStaff: boolean) {
       enabled: workspace.inbound_enabled === 1,
       configured: Boolean(workspace.inbound_secret_cipher),
       keyHash: workspace.inbound_secret_hash ? workspace.inbound_secret_hash.slice(0, 12) : null,
-      url: `${origin}/api/inbound/resend`,
-      resendReady: await resendConfigured(),
+      url: `${origin}/api/inbound/postbound`,
+      postboundReady: await postboundConfigured(),
       last: inboundActivity(),
     },
     ai: {
@@ -420,6 +424,28 @@ export const settings = new Hono<AppEnv>()
         Boolean(user && hasPermission(user.permissions, "manage_staff")),
       ),
     );
+  })
+
+  .post("/email/test", requirePermission("manage_settings"), rateLimit(5, 60), async (c) => {
+    const to = c.get("user")?.email?.trim();
+    if (!to) return c.json({ error: "Add an email address to your account first." }, 400);
+
+    const result = await sendEmail({
+      to,
+      subject: "UserCue test email",
+      html: `<div style="font-family:ui-sans-serif,system-ui,sans-serif;max-width:440px;margin:0 auto;padding:32px 8px;color:#18181b">
+  <p style="font-size:16px;font-weight:600;margin:0 0 8px">Email is working</p>
+  <p style="font-size:14px;line-height:1.5;color:#52525b;margin:0">
+    This is a test email from UserCue. If you received it, email delivery is set up correctly.
+  </p>
+</div>`,
+    });
+    const ok = result.sent;
+    const message = ok ? `Sent to ${to}.` : (result.error ?? "Could not send the test email");
+    noteEmailTest({ at: Math.floor(Date.now() / 1000), ok, message, to });
+    if (!ok) return c.json({ error: message }, 502);
+    await recordAudit(c, "email.test_sent", `Sent a test email to ${to}`);
+    return c.json({ ok: true, to });
   })
 
   .get("/api-keys", requireTeam, async (c) => {
@@ -560,9 +586,9 @@ export const settings = new Hono<AppEnv>()
         changelogComments: v.optional(v.boolean()),
         changelogReactions: v.optional(v.boolean()),
         assignmentMode: v.optional(v.picklist(ASSIGNMENT_MODES)),
-        resendEnabled: v.optional(v.boolean()),
-        resendFrom: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(200))),
-        resendApiKey: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(200))),
+        postboundEnabled: v.optional(v.boolean()),
+        postboundFrom: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(200))),
+        postboundApiKey: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(200))),
         smtpHost: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(200))),
         smtpEnabled: v.optional(v.boolean()),
         smtpPort: v.optional(v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(65535))),
@@ -599,13 +625,14 @@ export const settings = new Hono<AppEnv>()
     async (c) => {
       const body = c.req.valid("json");
       const current = await getWorkspace();
-      const from = body.resendFrom !== undefined ? body.resendFrom.trim() : current.resend_from;
+      const from =
+        body.postboundFrom !== undefined ? body.postboundFrom.trim() : current.postbound_from;
       const hasKey = Boolean(
-        body.resendApiKey?.trim() || current.resend_key_cipher || env.resendApiKey,
+        body.postboundApiKey?.trim() || current.postbound_key_cipher || env.postboundApiKey,
       );
-      const hasFrom = Boolean(from || env.resendFrom);
-      if (body.resendEnabled && (!hasKey || !hasFrom)) {
-        return c.json({ error: "Add a Resend API key and from address first." }, 400);
+      const hasFrom = Boolean(from || env.postboundFrom);
+      if (body.postboundEnabled && (!hasKey || !hasFrom)) {
+        return c.json({ error: "Add a Postbound API key and from address first." }, 400);
       }
       const smtpHost = body.smtpHost !== undefined ? body.smtpHost.trim() : current.smtp_host;
       const smtpFrom = body.smtpFrom !== undefined ? body.smtpFrom.trim() : current.smtp_from;
@@ -646,9 +673,9 @@ export const settings = new Hono<AppEnv>()
       }
       if (body.inboundEnabled) {
         const hasSecret = Boolean(body.inboundSecret?.trim() || current.inbound_secret_cipher);
-        if (!hasSecret || !(await resendConfigured())) {
+        if (!hasSecret || !(await postboundConfigured())) {
           return c.json(
-            { error: "Add a Resend API key and the webhook signing secret first." },
+            { error: "Add a Postbound API key and the webhook signing secret first." },
             400,
           );
         }

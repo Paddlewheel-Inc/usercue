@@ -192,9 +192,9 @@ COOKIE_SECURE=$COOKIE_SECURE
 POSTGRES_PASSWORD=$(rand)
 SECRET_KEY=$(rand)
 
-# Optional: email staff invites via Resend (can also be configured in the settings page)
-RESEND_API_KEY=
-RESEND_FROM=UserCue <noreply@example.com>
+# Optional: email staff invites via Postbound (can also be configured in the settings page)
+POSTBOUND_API_KEY=
+POSTBOUND_FROM=UserCue <noreply@example.com>
 EOF
   umask 022
   ok "Wrote .env with freshly generated secrets"

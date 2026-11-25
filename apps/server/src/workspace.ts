@@ -6,10 +6,10 @@ import { encryptSecret, hashSecret } from "./secret";
 export interface WorkspaceRow {
   id: number;
   allow_guest_feedback: number;
-  resend_enabled: number;
-  resend_from: string;
-  resend_key_cipher: string;
-  resend_key_hash: string;
+  postbound_enabled: number;
+  postbound_from: string;
+  postbound_key_cipher: string;
+  postbound_key_hash: string;
   smtp_enabled: number;
   smtp_host: string;
   smtp_port: number;
@@ -93,10 +93,10 @@ const select = db.query<WorkspaceRow>("SELECT * FROM workspace WHERE id = 1");
 const update = db.query(
   `UPDATE workspace SET
      allow_guest_feedback = ?,
-     resend_enabled = ?,
-     resend_from = ?,
-     resend_key_cipher = ?,
-     resend_key_hash = ?,
+     postbound_enabled = ?,
+     postbound_from = ?,
+     postbound_key_cipher = ?,
+     postbound_key_hash = ?,
      smtp_enabled = ?,
      smtp_host = ?,
      smtp_port = ?,
@@ -142,10 +142,10 @@ const listStaff = db.query<{ id: number; name: string; avatar_url: string | null
 const empty: WorkspaceRow = {
   id: 1,
   allow_guest_feedback: 1,
-  resend_enabled: 0,
-  resend_from: "",
-  resend_key_cipher: "",
-  resend_key_hash: "",
+  postbound_enabled: 0,
+  postbound_from: "",
+  postbound_key_cipher: "",
+  postbound_key_hash: "",
   smtp_enabled: 0,
   smtp_host: "",
   smtp_port: 587,
@@ -256,9 +256,9 @@ async function saveExtras(patch: WorkspaceExtras, current: WorkspaceRow) {
 
 export interface WorkspacePatch extends WorkspaceExtras {
   allowGuestFeedback?: boolean;
-  resendEnabled?: boolean;
-  resendFrom?: string;
-  resendApiKey?: string;
+  postboundEnabled?: boolean;
+  postboundFrom?: string;
+  postboundApiKey?: string;
   smtpEnabled?: boolean;
   smtpHost?: string;
   smtpPort?: number;
@@ -287,15 +287,20 @@ export async function saveWorkspace(patch: WorkspacePatch) {
       : patch.allowGuestFeedback
         ? 1
         : 0;
-  const resend =
-    patch.resendEnabled === undefined ? current.resend_enabled : patch.resendEnabled ? 1 : 0;
-  const from = patch.resendFrom !== undefined ? patch.resendFrom.trim() : current.resend_from;
-  const cipher = patch.resendApiKey?.trim()
-    ? encryptSecret(patch.resendApiKey.trim())
-    : current.resend_key_cipher;
-  const hash = patch.resendApiKey?.trim()
-    ? hashSecret(patch.resendApiKey.trim())
-    : current.resend_key_hash;
+  const postbound =
+    patch.postboundEnabled === undefined
+      ? current.postbound_enabled
+      : patch.postboundEnabled
+        ? 1
+        : 0;
+  const from =
+    patch.postboundFrom !== undefined ? patch.postboundFrom.trim() : current.postbound_from;
+  const cipher = patch.postboundApiKey?.trim()
+    ? encryptSecret(patch.postboundApiKey.trim())
+    : current.postbound_key_cipher;
+  const hash = patch.postboundApiKey?.trim()
+    ? hashSecret(patch.postboundApiKey.trim())
+    : current.postbound_key_hash;
   const smtpEnabled =
     patch.smtpEnabled === undefined ? current.smtp_enabled : patch.smtpEnabled ? 1 : 0;
   const smtpHost = patch.smtpHost !== undefined ? patch.smtpHost.trim() : current.smtp_host;
@@ -339,7 +344,7 @@ export async function saveWorkspace(patch: WorkspacePatch) {
   if (!customerTags) customerTagsRequired = 0;
   await update.run(
     allow,
-    resend,
+    postbound,
     from,
     cipher,
     hash,

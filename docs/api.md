@@ -90,13 +90,13 @@ Common recipes:
 
 ## Email in
 
-Turn emails into posts with Resend. Details live in **Settings → Integrations → Email in**.
+Turn emails into posts with Postbound. Details live in **Settings → Integrations → Email in**.
 
-1. In Resend, add a domain, enable receiving, and add the MX records.
-2. Add a webhook pointing at `https://feedback.example.com/api/inbound/resend` for the `email.received` event.
+1. In Postbound, add and verify a domain, enable receiving, and publish the inbound MX records it shows.
+2. Add a webhook pointing at `https://feedback.example.com/api/inbound/postbound` for the `email.received` event.
 3. Paste the endpoint's signing secret into UserCue and switch the feature on.
 
-Mail to `board-slug@your-domain` goes to that board. Anything else goes to your first board. Your Resend API key (under **General**) is used to read the message body.
+Mail to `board-slug@your-domain` goes to that board. Anything else goes to your first board. Your Postbound API key (under **Notifications**) is used to read the message body, so it needs full access.
 
 ## Embeds
 

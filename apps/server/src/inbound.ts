@@ -1,7 +1,7 @@
 import { LIMITS, stripHtml } from "@usercue/shared";
 import { db } from "./db";
 import { createIntakePost } from "./intake";
-import { resendCredentials } from "./mail";
+import { postboundCredentials } from "./mail";
 import { cleanBody, cleanSubject, parseSender } from "./mailparse";
 import { notifyNewPost } from "./notify";
 import { jobOrigin } from "./origin";
@@ -96,33 +96,33 @@ function allowSender(email: string): boolean {
 }
 
 async function fetchEmail(emailId: string): Promise<ReceivedEmail> {
-  let credentials: Awaited<ReturnType<typeof resendCredentials>>;
+  let credentials: Awaited<ReturnType<typeof postboundCredentials>>;
   try {
-    credentials = await resendCredentials();
+    credentials = await postboundCredentials();
   } catch {
     throw new InboundError(
-      "Could not read the saved Resend API key. Check that SECRET_KEY has not changed, then save the key again.",
+      "Could not read the saved Postbound API key. Check that SECRET_KEY has not changed, then save the key again.",
     );
   }
-  if (!credentials) throw new InboundError("Add a Resend API key and from address first.");
+  if (!credentials) throw new InboundError("Add a Postbound API key and from address first.");
   let response: Response;
   try {
     response = await fetch(
-      `https://api.resend.com/emails/receiving/${encodeURIComponent(emailId)}`,
+      `https://api.postbound.app/emails/receiving/${encodeURIComponent(emailId)}`,
       {
         headers: { Authorization: `Bearer ${credentials.key}` },
         signal: AbortSignal.timeout(15_000),
       },
     );
   } catch {
-    throw new InboundError("Could not reach Resend to read the message.");
+    throw new InboundError("Could not reach Postbound to read the message.");
   }
   if (response.status === 401 || response.status === 403) {
     throw new InboundError(
-      `Resend rejected the API key (${response.status}). Reading received mail needs a key with full access, not sending access only.`,
+      `Postbound rejected the API key (${response.status}). Reading received mail needs a key with full access, not sending access only.`,
     );
   }
-  if (!response.ok) throw new InboundError(`Resend returned ${response.status}.`);
+  if (!response.ok) throw new InboundError(`Postbound returned ${response.status}.`);
   return (await response.json()) as ReceivedEmail;
 }
 

@@ -183,10 +183,10 @@ const SCHEMA = `
   CREATE TABLE IF NOT EXISTS workspace (
     id                   INTEGER PRIMARY KEY CHECK (id = 1),
     allow_guest_feedback INTEGER NOT NULL DEFAULT 1,
-    resend_enabled       INTEGER NOT NULL DEFAULT 0,
-    resend_from          TEXT NOT NULL DEFAULT '',
-    resend_key_cipher    TEXT NOT NULL DEFAULT '',
-    resend_key_hash      TEXT NOT NULL DEFAULT '',
+    postbound_enabled    INTEGER NOT NULL DEFAULT 0,
+    postbound_from       TEXT NOT NULL DEFAULT '',
+    postbound_key_cipher TEXT NOT NULL DEFAULT '',
+    postbound_key_hash   TEXT NOT NULL DEFAULT '',
     smtp_enabled         INTEGER NOT NULL DEFAULT 0,
     smtp_host            TEXT NOT NULL DEFAULT '',
     smtp_port            INTEGER NOT NULL DEFAULT 587,
@@ -756,6 +756,30 @@ const MIGRATE = `
   UPDATE roles
   SET permissions = replace(permissions, '"manage_projects"', '"manage_tasks"')
   WHERE permissions LIKE '%"manage_projects"%';
+
+  ALTER TABLE workspace ADD COLUMN IF NOT EXISTS postbound_enabled INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE workspace ADD COLUMN IF NOT EXISTS postbound_from TEXT NOT NULL DEFAULT '';
+  ALTER TABLE workspace ADD COLUMN IF NOT EXISTS postbound_key_cipher TEXT NOT NULL DEFAULT '';
+  ALTER TABLE workspace ADD COLUMN IF NOT EXISTS postbound_key_hash TEXT NOT NULL DEFAULT '';
+
+  DO $$
+  BEGIN
+    IF EXISTS (
+      SELECT 1 FROM information_schema.columns
+      WHERE table_schema = current_schema() AND table_name = 'workspace' AND column_name = 'resend_enabled'
+    ) THEN
+      UPDATE workspace SET
+        postbound_enabled = resend_enabled,
+        postbound_from = resend_from,
+        postbound_key_cipher = resend_key_cipher,
+        postbound_key_hash = resend_key_hash;
+      ALTER TABLE workspace
+        DROP COLUMN resend_enabled,
+        DROP COLUMN resend_from,
+        DROP COLUMN resend_key_cipher,
+        DROP COLUMN resend_key_hash;
+    END IF;
+  END $$;
 `;
 
 function ident(name: string): string {

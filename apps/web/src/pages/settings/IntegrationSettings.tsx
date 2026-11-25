@@ -375,22 +375,25 @@ function InboundSettings() {
     <form onSubmit={submit} className="flex flex-col gap-3">
       <SectionHead title="Email in">
         Turn emails into feedback. Customers write to an address on your domain and the message
-        becomes a request. Receiving is handled by Resend.
+        becomes a request. Receiving is handled by Postbound.
       </SectionHead>
-      {!data.inbound.resendReady && (
+      {!data.inbound.postboundReady && (
         <p className="rounded-2xl bg-hover/60 px-3.5 py-3 text-[12px] text-muted">
-          Add your Resend API key and from address under Notifications first. The key needs full
+          Add your Postbound API key and from address under Notifications first. The key needs full
           access, because it is used to read the incoming message.
         </p>
       )}
       {isLocalUrl(data.inbound.url) && (
         <p className="rounded-2xl bg-hover/60 px-3.5 py-3 text-[12px] text-muted">
-          Resend cannot reach this address from the internet. Set <code>PUBLIC_URL</code> to your
+          Postbound cannot reach this address from the internet. Set <code>PUBLIC_URL</code> to your
           public domain, or use a tunnel while testing.
         </p>
       )}
       <ol className="flex list-decimal flex-col gap-1.5 pl-8 text-[12px] leading-5 text-muted">
-        <li>In Resend, add a domain and turn on receiving, then add the MX records it shows.</li>
+        <li>
+          In Postbound, add and verify a domain, turn on receiving, then publish the inbound MX
+          records it shows.
+        </li>
         <li>
           Under Webhooks, add the endpoint below and subscribe to the <code>email.received</code>{" "}
           event.

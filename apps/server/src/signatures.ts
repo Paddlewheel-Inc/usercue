@@ -2,15 +2,15 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 
 const SIGNATURE_TOLERANCE_SECONDS = 300;
 
-export interface SvixHeaders {
+export interface WebhookHeaders {
   id: string;
   timestamp: string;
   signature: string;
 }
 
-export function verifySvixSignature(
+export function verifyWebhookSignature(
   secret: string,
-  headers: SvixHeaders,
+  headers: WebhookHeaders,
   body: string,
   nowSeconds = Math.floor(Date.now() / 1000),
 ): boolean {

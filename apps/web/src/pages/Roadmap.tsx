@@ -59,7 +59,7 @@ function Lane({ status, hint }: { status: Status; hint: string }) {
   const { data: posts = [] } = usePosts({ status });
 
   return (
-    <section className="flex min-w-0 flex-col rounded-[1.5rem] bg-hover/55 p-3">
+    <section className="flex min-w-0 flex-col rounded-3xl bg-hover/55 p-3">
       <header className="mb-3 flex items-baseline justify-between gap-2 px-2 pt-1">
         <div>
           <h2 className="flex items-center gap-2 text-[13px] font-medium">

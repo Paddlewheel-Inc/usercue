@@ -1,37 +1,37 @@
 import { Hono } from "hono";
 import { InboundError, inboundSecret, noteInbound, processInbound } from "../inbound";
-import { verifySvixSignature } from "../signatures";
+import { verifyWebhookSignature } from "../signatures";
 
-interface ResendEvent {
+interface PostboundEvent {
   type?: string;
   data?: { email_id?: string };
 }
 
-export const inbound = new Hono().post("/resend", async (c) => {
+export const inbound = new Hono().post("/postbound", async (c) => {
   const secret = await inboundSecret();
   if (!secret) return c.json({ error: "Not found" }, 404);
 
   const body = await c.req.text();
-  const verified = verifySvixSignature(
+  const verified = verifyWebhookSignature(
     secret,
     {
-      id: c.req.header("svix-id") ?? "",
-      timestamp: c.req.header("svix-timestamp") ?? "",
-      signature: c.req.header("svix-signature") ?? "",
+      id: c.req.header("webhook-id") ?? "",
+      timestamp: c.req.header("webhook-timestamp") ?? "",
+      signature: c.req.header("webhook-signature") ?? "",
     },
     body,
   );
   if (!verified) {
     noteInbound(
       false,
-      "A request failed the signature check. Paste the signing secret from the same Resend webhook.",
+      "A request failed the signature check. Paste the signing secret from the same Postbound webhook.",
     );
     return c.json({ error: "Invalid signature" }, 401);
   }
 
-  let event: ResendEvent;
+  let event: PostboundEvent;
   try {
-    event = JSON.parse(body) as ResendEvent;
+    event = JSON.parse(body) as PostboundEvent;
   } catch {
     return c.json({ error: "Invalid payload" }, 400);
   }

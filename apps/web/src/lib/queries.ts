@@ -711,9 +711,9 @@ export function useSaveSettings() {
       changelogComments?: boolean;
       changelogReactions?: boolean;
       assignmentMode?: AssignmentMode;
-      resendEnabled?: boolean;
-      resendFrom?: string;
-      resendApiKey?: string;
+      postboundEnabled?: boolean;
+      postboundFrom?: string;
+      postboundApiKey?: string;
       smtpHost?: string;
       smtpEnabled?: boolean;
       smtpPort?: number;
@@ -749,6 +749,14 @@ export function useSaveSettings() {
       qc.invalidateQueries({ queryKey: ["me"] });
       qc.invalidateQueries({ queryKey: ["auth-methods"] });
     },
+  });
+}
+
+export function useTestEmail() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => unwrap(api.settings.email.test.$post()),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["settings"] }),
   });
 }
 

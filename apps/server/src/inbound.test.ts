@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { createHmac } from "node:crypto";
 import { cleanBody, cleanSubject, parseSender } from "./mailparse";
-import { signWebhook, verifySvixSignature } from "./signatures";
+import { signWebhook, verifyWebhookSignature } from "./signatures";
 import { textToHtml } from "./text";
 
 const secret = `whsec_${Buffer.from("test-secret").toString("base64")}`;
@@ -11,28 +11,28 @@ function sign(id: string, timestamp: string, body: string) {
   return createHmac("sha256", key).update(`${id}.${timestamp}.${body}`).digest("base64");
 }
 
-describe("verifySvixSignature", () => {
+describe("verifyWebhookSignature", () => {
   const body = '{"type":"email.received"}';
   const now = 1_700_000_000;
   const timestamp = String(now);
 
   test("accepts a valid signature", () => {
     const signature = `v1,${sign("msg_1", timestamp, body)}`;
-    expect(verifySvixSignature(secret, { id: "msg_1", timestamp, signature }, body, now)).toBe(
+    expect(verifyWebhookSignature(secret, { id: "msg_1", timestamp, signature }, body, now)).toBe(
       true,
     );
   });
 
   test("accepts when any listed signature matches", () => {
     const signature = `v1,invalid v1,${sign("msg_1", timestamp, body)}`;
-    expect(verifySvixSignature(secret, { id: "msg_1", timestamp, signature }, body, now)).toBe(
+    expect(verifyWebhookSignature(secret, { id: "msg_1", timestamp, signature }, body, now)).toBe(
       true,
     );
   });
 
   test("rejects a tampered body", () => {
     const signature = `v1,${sign("msg_1", timestamp, body)}`;
-    expect(verifySvixSignature(secret, { id: "msg_1", timestamp, signature }, "{}", now)).toBe(
+    expect(verifyWebhookSignature(secret, { id: "msg_1", timestamp, signature }, "{}", now)).toBe(
       false,
     );
   });
@@ -40,7 +40,7 @@ describe("verifySvixSignature", () => {
   test("rejects stale timestamps", () => {
     const signature = `v1,${sign("msg_1", timestamp, body)}`;
     expect(
-      verifySvixSignature(secret, { id: "msg_1", timestamp, signature }, body, now + 3600),
+      verifyWebhookSignature(secret, { id: "msg_1", timestamp, signature }, body, now + 3600),
     ).toBe(false);
   });
 });

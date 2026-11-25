@@ -54,7 +54,7 @@ The product stays out of the way. You can run it yourself or let us host it.
 | **Workspace** | Tags, roles, and assignment live with the team. Automatic assignment hands the next planned suggestion to the next person in line |
 | **Sign in** | GitHub, Discord, Google, Roblox, and Microsoft. Turn on the ones you use |
 | **Out the door** | New suggestions, status changes, and comments can post to Discord, Teams, or Slack. Signed webhooks work with Zapier and Make |
-| **In the door** | Feedback can arrive by email through Resend, from an embeddable widget or inline board, or from an import of Canny, Featurebase, Productboard, or any CSV |
+| **In the door** | Feedback can arrive by email through Postbound, from an embeddable widget or inline board, or from an import of Canny, Featurebase, Productboard, or any CSV |
 | **Optional AI** | Bring any OpenAI-compatible key to summarize long threads, suggest tags, and draft changelog entries. It stays off until you add a key |
 | **Control** | Limit votes per person, manage API keys, and review an audit log of who changed what |
 
@@ -141,8 +141,8 @@ Copy `.env.example` and change only what you need. Email, sign in providers, and
 | `PUBLIC_URL` | empty | Used for OAuth redirects, shipped notices, the weekly digest, and email in |
 | `COOKIE_SECURE` | `false` | Marks session cookies Secure for HTTPS sites |
 | `USERCUE_IMAGE` | published image | The image the production stack runs |
-| `RESEND_API_KEY`, `RESEND_FROM` | empty | Email for staff invites, used when settings have no key |
-| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`, `SMTP_SECURE` | empty | SMTP fallback when Resend is not configured |
+| `POSTBOUND_API_KEY`, `POSTBOUND_FROM` | empty | Email for staff invites, used when settings have no key |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`, `SMTP_SECURE` | empty | SMTP fallback when Postbound is not configured |
 | `USERCUE_PLAN_FILE` | empty | Path to a JSON plan file that limits staff seats |
 
 > [!TIP]

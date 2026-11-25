@@ -3,25 +3,41 @@ import { decryptSecret } from "./secret";
 import { sendSmtpEmail, smtpEnabled } from "./smtp";
 import { getWorkspace } from "./workspace";
 
-export async function resendCredentials(): Promise<{ key: string; from: string } | null> {
+export async function postboundCredentials(): Promise<{ key: string; from: string } | null> {
   const workspace = await getWorkspace();
-  const key = workspace.resend_key_cipher
-    ? decryptSecret(workspace.resend_key_cipher)
-    : env.resendApiKey;
-  const from = workspace.resend_from || env.resendFrom;
+  const key = workspace.postbound_key_cipher
+    ? decryptSecret(workspace.postbound_key_cipher)
+    : env.postboundApiKey;
+  const from = workspace.postbound_from || env.postboundFrom;
   return key && from ? { key, from } : null;
 }
 
-export async function resendConfigured(): Promise<boolean> {
-  return (await resendCredentials()) !== null;
+export async function postboundConfigured(): Promise<boolean> {
+  return (await postboundCredentials()) !== null;
 }
 
-export async function resendEnabled(): Promise<boolean> {
-  return (await resendConfigured()) && (await getWorkspace()).resend_enabled === 1;
+export async function postboundEnabled(): Promise<boolean> {
+  return (await postboundConfigured()) && (await getWorkspace()).postbound_enabled === 1;
 }
 
 export async function emailEnabled(): Promise<boolean> {
-  return (await resendEnabled()) || (await smtpEnabled());
+  return (await postboundEnabled()) || (await smtpEnabled());
+}
+
+export interface EmailTestActivity {
+  at: number;
+  ok: boolean;
+  message: string;
+  to: string;
+}
+
+let lastEmailTest: EmailTestActivity | null = null;
+
+export const emailTestActivity = () => lastEmailTest;
+
+export function noteEmailTest(result: EmailTestActivity) {
+  lastEmailTest = result;
+  if (!result.ok) console.warn(`Test email: ${result.message}`);
 }
 
 export async function sendEmail(options: {
@@ -29,14 +45,15 @@ export async function sendEmail(options: {
   subject: string;
   html: string;
 }): Promise<{ sent: boolean; error?: string }> {
-  const creds = await resendCredentials();
-  if (creds && (await getWorkspace()).resend_enabled === 1) {
-    const res = await fetch("https://api.resend.com/emails", {
+  const creds = await postboundCredentials();
+  if (creds && (await getWorkspace()).postbound_enabled === 1) {
+    const res = await fetch("https://api.postbound.app/emails", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${creds.key}`,
         "Content-Type": "application/json",
       },
+      signal: AbortSignal.timeout(15_000),
       body: JSON.stringify({
         from: creds.from,
         to: options.to,

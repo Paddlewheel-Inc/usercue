@@ -66,3 +66,54 @@ test.skipIf(!databaseUrl)(
     }
   },
 );
+
+test.skipIf(!databaseUrl)("carries legacy email settings into Postbound columns", async () => {
+  const admin = new SQL(databaseUrl!);
+  const schema = `legacy_${randomUUID().replaceAll("-", "")}`;
+  await admin.unsafe(`CREATE SCHEMA ${schema}`);
+  try {
+    const url = new URL(databaseUrl!);
+    url.searchParams.set("options", `-csearch_path=${schema}`);
+    const start = async () => {
+      const child = Bun.spawn(
+        [
+          process.execPath,
+          "-e",
+          'const {initDb}=await import("./apps/server/src/db.ts");await initDb();process.exit(0);',
+        ],
+        {
+          cwd: fileURLToPath(new URL("../../..", import.meta.url)),
+          env: { ...process.env, DATABASE_URL: url.toString() },
+          stdout: "pipe",
+          stderr: "pipe",
+        },
+      );
+      const error = await new Response(child.stderr).text();
+      const code = await child.exited;
+      if (code !== 0) throw new Error(`Database startup failed: ${error}`);
+    };
+    await start();
+    for (const column of ["enabled", "from", "key_cipher", "key_hash"]) {
+      await admin.unsafe(
+        `ALTER TABLE ${schema}.workspace RENAME COLUMN postbound_${column} TO resend_${column}`,
+      );
+    }
+    await admin.unsafe(
+      `UPDATE ${schema}.workspace SET resend_enabled = 1, resend_from = 'UserCue <hello@example.com>', resend_key_cipher = 'cipher', resend_key_hash = 'hash'`,
+    );
+    await start();
+    const rows = await admin.unsafe(
+      `SELECT postbound_enabled, postbound_from, postbound_key_cipher, postbound_key_hash FROM ${schema}.workspace`,
+    );
+    expect(rows[0]?.postbound_enabled).toBe(1);
+    expect(rows[0]?.postbound_from).toBe("UserCue <hello@example.com>");
+    expect(rows[0]?.postbound_key_cipher).toBe("cipher");
+    expect(rows[0]?.postbound_key_hash).toBe("hash");
+    const legacy =
+      await admin`SELECT column_name FROM information_schema.columns WHERE table_schema=${schema} AND table_name='workspace' AND column_name LIKE 'resend_%'`;
+    expect(legacy.length).toBe(0);
+  } finally {
+    await admin.unsafe(`DROP SCHEMA ${schema} CASCADE`);
+    await admin.end();
+  }
+});
