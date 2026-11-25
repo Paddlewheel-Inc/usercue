@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [1.3.1]
+
 - Fix fresh database startup by creating the posts author index after the `author_id` migration.
 
 ## [1.3.0]
