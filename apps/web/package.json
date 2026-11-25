@@ -15,6 +15,7 @@
     "gemoji": "^8.1.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
+    "react-google-recaptcha": "^3.1.0",
     "wouter": "^3.7.0"
   },
   "devDependencies": {
@@ -22,6 +23,7 @@
     "@types/bun": "latest",
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",
+    "@types/react-google-recaptcha": "^2.1.9",
     "@usercue/server": "workspace:*",
     "@vitejs/plugin-react": "^5.0.0",
     "tailwindcss": "^4.1.0",
