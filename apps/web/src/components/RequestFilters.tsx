@@ -1,13 +1,15 @@
 import type { Sort } from "@usercue/shared";
 import { type FormEvent, useState } from "react";
 import { type Filter, filterQuery } from "../lib/adminFilter";
-import { useMe, useSavedViews, useSaveView, useSettings, useTags } from "../lib/queries";
+import { useMe, useSavedViews, useSaveView, useSettings } from "../lib/queries";
+import { PostFilterExtras } from "./PostFilterExtras";
 import { Select } from "./Select";
 import { ErrorText } from "./ui";
 
 const SORT_OPTIONS: { value: Sort; label: string }[] = [
   { value: "new", label: "Newest" },
   { value: "top", label: "Most votes" },
+  { value: "discussed", label: "Most discussed" },
   { value: "priority", label: "Priority score" },
 ];
 
@@ -23,17 +25,12 @@ export function RequestFilters({
   filter: Filter;
   onChange: (patch: Partial<Filter>) => void;
 }) {
-  const { data: tags = [] } = useTags();
   const { data: settings } = useSettings();
   const { data: me } = useMe();
   const sorts = me?.triageBoards.length
     ? SORT_OPTIONS
     : SORT_OPTIONS.filter((o) => o.value !== "priority");
   const staff = settings?.staff ?? [];
-  const tagOptions = [
-    { value: "", label: "Any tag" },
-    ...tags.map((tag) => ({ value: String(tag.id), label: tag.name })),
-  ];
   const assigneeOptions = [
     { value: "", label: "Anyone" },
     { value: "none", label: "Unassigned" },
@@ -55,17 +52,14 @@ export function RequestFilters({
         onChange={(minVotes) => onChange({ minVotes: minVotes || undefined })}
       />
       <Select
-        label="Tag"
-        value={filter.tag ?? ""}
-        options={tagOptions}
-        onChange={(tag) => onChange({ tag: tag || undefined })}
-      />
-      <Select
         label="Assignee"
         value={filter.assignee ?? ""}
         options={assigneeOptions}
         onChange={(assignee) => onChange({ assignee: assignee || undefined })}
       />
+      <div className="col-span-2">
+        <PostFilterExtras filter={filter} onChange={onChange} board={filter.board} compact />
+      </div>
       <SaveView filter={filter} />
     </div>
   );

@@ -20,7 +20,7 @@ export const STATUS_LABELS: Record<Status, string> = {
   closed: "Closed",
 };
 
-export const SORTS = ["top", "new", "priority"] as const;
+export const SORTS = ["top", "new", "discussed", "priority"] as const;
 export type Sort = (typeof SORTS)[number];
 export const STAFF_SORTS: readonly Sort[] = ["priority"];
 

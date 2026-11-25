@@ -12,7 +12,8 @@ A key can only do what its permissions allow. `GET /api/v1/me` returns the key's
 
 | Endpoint | Permission | What it does |
 | --- | --- | --- |
-| `GET /api/v1/posts` | none | List posts. Filters: `board`, `status`, `q`, `tag`, `assignee`, `minVotes`, `sort` (`top`, `new`, plus `priority` for staff keys). |
+| `GET /api/v1/posts` | none | List posts. Filters: `board`, `status`, `q`, `tag` (up to eight comma-separated tag ids), `tagMode` (`any`, `all`), `assignee`, `author` (user id, `none` for guests, or an author name), `createdAfter`, `createdBefore` (`YYYY-MM-DD`, inclusive), `minVotes`, `sort` (`top`, `new`, `discussed`, plus `priority` for staff keys). |
+| `GET /api/v1/posts/authors` | none | Authors with posts, optionally scoped by `board`, for building author filters. |
 | `POST /api/v1/posts` | none | Create a post. |
 | `PATCH /api/v1/posts/:id` | `manage_posts` | Change status, board, assignee, tags, `impact`, and `effort` (1 to 5). |
 | `POST /api/v1/posts/:id/merge` | `manage_posts` | Merge into `{ "targetId": 12 }`. Votes and comments move over. |

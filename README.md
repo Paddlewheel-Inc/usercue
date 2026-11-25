@@ -49,7 +49,7 @@ The product stays out of the way. You can run it yourself or let us host it.
 | **Boards** | Suggestions land on a board. People vote, comment, and reply. Guests can post, or you can ask them to sign in first |
 | **Roadmap** | Status is public: open, planned, in progress, complete, closed. The roadmap is the same work shown as a path |
 | **Changelog** | Write in the rich editor or in markdown. Headings such as `## New`, `## Changed`, `## Fixed`, and `## Removed` become section chips. Readers can follow the RSS feed |
-| **Triage** | Similar posts appear while someone types, so people vote instead of duplicating. Merge duplicates, score impact against effort, keep internal notes, filter by tag or assignee, and save views |
+| **Triage** | Similar posts appear while someone types, so people vote instead of duplicating. Merge duplicates, score impact against effort, keep internal notes, filter by status, tag, author, date, or assignee, and save views |
 | **Closing the loop** | Voters hear when their request ships. Changelog entries link to the posts they close, and posts show a shipped badge. A weekly digest keeps the team current |
 | **Workspace** | Tags, roles, and assignment live with the team. Automatic assignment hands the next planned suggestion to the next person in line |
 | **Sign in** | GitHub, Discord, Google, Roblox, and Microsoft. Turn on the ones you use |

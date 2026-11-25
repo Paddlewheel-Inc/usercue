@@ -39,7 +39,11 @@ export interface PostFilters {
   sort?: Sort;
   q?: string;
   tag?: string;
+  tagMode?: "any" | "all";
   assignee?: string;
+  author?: string;
+  createdAfter?: string;
+  createdBefore?: string;
   minVotes?: string;
 }
 
@@ -116,6 +120,13 @@ export const useCounts = (board?: string) =>
     queryFn: () => unwrap(api.posts.counts.$get({ query: { board } })),
   });
 
+export const usePostAuthors = (board?: string) =>
+  useQuery({
+    queryKey: ["post-authors", board],
+    queryFn: () => unwrap(api.posts.authors.$get({ query: { board } })),
+    staleTime: 5 * 60_000,
+  });
+
 export const usePost = (id: number | undefined) =>
   useQuery({
     queryKey: ["post", id],
@@ -127,7 +138,9 @@ function useInvalidatePosts() {
   const qc = useQueryClient();
   return () =>
     Promise.all(
-      ["posts", "post", "counts"].map((key) => qc.invalidateQueries({ queryKey: [key] })),
+      ["posts", "post", "counts", "post-authors"].map((key) =>
+        qc.invalidateQueries({ queryKey: [key] }),
+      ),
     );
 }
 
@@ -579,6 +592,7 @@ export function useDeleteBoard() {
         qc.invalidateQueries({ queryKey: ["boards"] }),
         qc.invalidateQueries({ queryKey: ["posts"] }),
         qc.invalidateQueries({ queryKey: ["counts"] }),
+        qc.invalidateQueries({ queryKey: ["post-authors"] }),
       ]),
   });
 }
@@ -593,6 +607,7 @@ export function useWipeBoard() {
         qc.invalidateQueries({ queryKey: ["posts"] }),
         qc.invalidateQueries({ queryKey: ["post"] }),
         qc.invalidateQueries({ queryKey: ["counts"] }),
+        qc.invalidateQueries({ queryKey: ["post-authors"] }),
       ]),
   });
 }

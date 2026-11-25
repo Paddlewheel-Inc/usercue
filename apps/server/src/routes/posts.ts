@@ -1,5 +1,6 @@
 import { vValidator } from "@hono/valibot-validator";
 import {
+  isDateOnly,
   isEmptyHtml,
   LIMITS,
   PRIORITY_LEVELS,
@@ -39,14 +40,30 @@ const text = (max: number) => v.pipe(v.string(), v.trim(), v.minLength(1), v.max
 const numberParam = (min: number, max: number) =>
   v.pipe(v.string(), v.transform(Number), v.integer(), v.minValue(min), v.maxValue(max));
 
+const dateParam = v.pipe(v.string(), v.check(isDateOnly, "Use a valid date"));
+
 const listQuery = v.object({
   category: v.optional(v.picklist(STATUSES)),
   board: v.optional(v.string()),
   status: v.optional(v.pipe(v.string(), v.minLength(1), v.maxLength(80))),
   sort: v.optional(v.picklist(SORTS), "top"),
   q: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(100))),
-  tag: v.optional(numberParam(1, Number.MAX_SAFE_INTEGER)),
+  tag: v.optional(
+    v.pipe(
+      v.string(),
+      v.regex(/^\d+(,\d+){0,7}$/),
+      v.check(
+        (value) =>
+          value.split(",").every((id) => Number.isSafeInteger(Number(id)) && Number(id) > 0),
+        "Use up to eight tag ids",
+      ),
+    ),
+  ),
+  tagMode: v.optional(v.picklist(["any", "all"]), "any"),
   assignee: v.optional(v.union([v.literal("none"), numberParam(1, Number.MAX_SAFE_INTEGER)])),
+  author: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(60))),
+  createdAfter: v.optional(dateParam),
+  createdBefore: v.optional(dateParam),
   minVotes: v.optional(numberParam(0, 1_000_000), "0"),
   limit: v.optional(numberParam(1, 100), "50"),
   offset: v.optional(numberParam(0, 100_000), "0"),
@@ -124,12 +141,27 @@ const listPosts = db.query<PostListRow>(`
     AND ($status::text IS NULL OR p.status = $status)
     AND ($category::text IS NULL OR p.status IN (SELECT id FROM workflow_statuses WHERE category = $category))
     AND ($q::text IS NULL OR p.title LIKE $q ESCAPE '\\' OR p.body LIKE $q ESCAPE '\\')
-    AND ($tag::int IS NULL OR EXISTS (SELECT 1 FROM post_tags pt WHERE pt.post_id = p.id AND pt.tag_id = $tag::int))
+    AND ($tags::text IS NULL OR EXISTS (
+      SELECT 1 FROM post_tags pt
+      WHERE pt.post_id = p.id
+        AND pt.tag_id = ANY (SELECT value::int FROM jsonb_array_elements_text($tags::jsonb))
+    ))
+    AND ($tagMode::text != 'all' OR $tags::text IS NULL OR (
+      SELECT COUNT(DISTINCT pt.tag_id) FROM post_tags pt
+      WHERE pt.post_id = p.id
+        AND pt.tag_id = ANY (SELECT value::int FROM jsonb_array_elements_text($tags::jsonb))
+    ) = $tagCount::int)
     AND ($assignee::int IS NULL OR p.assignee_id = $assignee::int)
     AND ($unassigned::int = 0 OR p.assignee_id IS NULL)
+    AND ($authorId::int IS NULL OR p.author_id = $authorId::int)
+    AND ($guestAuthors::int = 0 OR p.author_id IS NULL)
+    AND ($authorName::text IS NULL OR p.author_name ILIKE $authorName ESCAPE '\\')
+    AND ($createdAfter::bigint IS NULL OR p.created_at >= $createdAfter::bigint)
+    AND ($createdBefore::bigint IS NULL OR p.created_at <= $createdBefore::bigint)
     AND p.vote_count >= $minVotes::int
   ORDER BY
     CASE WHEN $sort::text = 'top' THEN p.vote_count END DESC,
+    CASE WHEN $sort::text = 'discussed' THEN p.comment_count END DESC,
     CASE WHEN $sort::text = 'priority' THEN (p.vote_count + 1)::float * p.impact / p.effort END DESC NULLS LAST,
     p.created_at DESC, p.id DESC
   LIMIT $limit::int OFFSET $offset::int`);
@@ -144,6 +176,16 @@ const statusCounts = db.query<{ status: Status; count: number }>(`
   FROM posts p JOIN boards b ON b.id = p.board_id
   WHERE ($board::text IS NULL OR b.slug = $board)
   GROUP BY p.status`);
+
+const authorOptions = db.query<{ id: number | null; name: string }>(`
+  SELECT id, name
+  FROM (
+    SELECT DISTINCT p.author_id AS id, p.author_name AS name, (p.author_id IS NULL) AS guest
+    FROM posts p JOIN boards b ON b.id = p.board_id
+    WHERE ($board::text IS NULL OR b.slug = $board)
+  ) AS authors
+  ORDER BY guest, name
+  LIMIT 100`);
 
 type CommentListRow = CommentRow & {
   author_avatar: string | null;
@@ -395,6 +437,9 @@ function replaceTags(postId: number, tagIds: number[]) {
 }
 
 const escapeLike = (s: string) => `%${s.replace(/[\\%_]/g, "\\$&")}%`;
+const dayStart = (date: string | undefined) =>
+  date ? Math.floor(Date.parse(`${date}T00:00:00.000Z`) / 1000) : null;
+const dayEnd = (date: string | undefined) => (date ? dayStart(date)! + 86_399 : null);
 
 async function applyUpdate(
   id: number,
@@ -419,7 +464,11 @@ export const posts = new Hono<AppEnv>()
       sort: requestedSort,
       q,
       tag,
+      tagMode,
       assignee,
+      author,
+      createdAfter,
+      createdBefore,
       minVotes,
       limit,
       offset,
@@ -429,15 +478,27 @@ export const posts = new Hono<AppEnv>()
     if (status && !(await findWorkflowStatus.get(status))) {
       return c.json({ error: "Unknown workflow status" }, 400);
     }
+    const tagIds = tag ? tag.split(",").map(Number) : [];
+    const authorId =
+      author && /^\d+$/.test(author) && Number.isSafeInteger(Number(author))
+        ? Number(author)
+        : null;
     const rows = await listPosts.all({
       voter: c.get("visitorId"),
       board: board ?? null,
       status: status ?? null,
       category: category ?? null,
       q: q ? escapeLike(q) : null,
-      tag: tag ?? null,
+      tags: tagIds.length ? JSON.stringify(tagIds) : null,
+      tagCount: tagIds.length,
+      tagMode: tagIds.length > 1 ? tagMode : "any",
       assignee: typeof assignee === "number" ? assignee : null,
       unassigned: assignee === "none" ? 1 : 0,
+      authorId,
+      guestAuthors: author === "none" ? 1 : 0,
+      authorName: author && authorId === null && author !== "none" ? escapeLike(author) : null,
+      createdAfter: dayStart(createdAfter),
+      createdBefore: dayEnd(createdBefore),
       minVotes,
       sort,
       limit,
@@ -456,6 +517,11 @@ export const posts = new Hono<AppEnv>()
     >;
     for (const row of rows) counts[row.status] = row.count;
     return c.json(counts);
+  })
+
+  .get("/authors", async (c) => {
+    const rows = await authorOptions.all({ board: c.req.query("board") ?? null });
+    return c.json(rows.map((row) => ({ id: row.id, name: row.name })));
   })
 
   .post("/", authenticateApiKey, rateLimit(10, 60), vValidator("json", createPost), async (c) => {

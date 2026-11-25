@@ -116,6 +116,8 @@ const SCHEMA = `
   );
   CREATE INDEX IF NOT EXISTS posts_board_status ON posts(board_id, status);
   CREATE INDEX IF NOT EXISTS posts_votes ON posts(vote_count DESC);
+  CREATE INDEX IF NOT EXISTS posts_author ON posts(author_id);
+  CREATE INDEX IF NOT EXISTS posts_created_at ON posts(created_at DESC);
 
   CREATE TABLE IF NOT EXISTS votes (
     post_id    INTEGER NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
@@ -153,6 +155,7 @@ const SCHEMA = `
     tag_id  INTEGER NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
     PRIMARY KEY (post_id, tag_id)
   );
+  CREATE INDEX IF NOT EXISTS post_tags_tag ON post_tags(tag_id, post_id);
 
   CREATE TABLE IF NOT EXISTS oauth_providers (
     provider      TEXT PRIMARY KEY,

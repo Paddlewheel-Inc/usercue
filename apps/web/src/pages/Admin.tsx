@@ -166,7 +166,7 @@ function Sidebar({
         </Section>
 
         <Section title="The pile">
-          <SidebarLink to={href({ board: filter.board })} active={allActive} count={total}>
+          <SidebarLink to={href({ ...filter, status: undefined })} active={allActive} count={total}>
             <Inbox className={allActive ? "text-accent" : "text-faint"} /> All
           </SidebarLink>
           {statuses.map((item) => {
@@ -174,12 +174,7 @@ function Sidebar({
             const n = counts?.[status] ?? 0;
             const on = !away && filter.status === status;
             return (
-              <SidebarLink
-                key={status}
-                to={href({ board: filter.board, status })}
-                active={on}
-                count={n}
-              >
+              <SidebarLink key={status} to={href({ ...filter, status })} active={on} count={n}>
                 <StatusIcon status={status} filled={n > 0} />
                 {item.name}
               </SidebarLink>
@@ -408,7 +403,7 @@ function BoardsNav({
           key={b.slug}
           board={b}
           active={!muted && filter.board === b.slug}
-          href={href({ status: filter.status, board: b.slug })}
+          href={href({ ...filter, board: b.slug })}
           canRename={allowCreate}
         />
       ))}

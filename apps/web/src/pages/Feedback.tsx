@@ -2,6 +2,7 @@ import { type Sort, type Status } from "@usercue/shared";
 import { useDeferredValue, useState } from "react";
 import { Link, useParams, useSearch } from "wouter";
 import { Search } from "../components/icons";
+import { type ExtraFilters, PostFilterExtras } from "../components/PostFilterExtras";
 import { PostForm } from "../components/PostForm";
 import { PostRow } from "../components/PostRow";
 import { Empty } from "../components/ui";
@@ -12,6 +13,7 @@ import { useWorkflow } from "../lib/workflow";
 const SORT_OPTIONS: { value: Sort; label: string }[] = [
   { value: "top", label: "Top" },
   { value: "new", label: "New" },
+  { value: "discussed", label: "Discussed" },
 ];
 
 export function Feedback() {
@@ -21,13 +23,24 @@ export function Feedback() {
   const [sort, setSort] = useState<Sort>("top");
   const [status, setStatus] = useState<Status | undefined>();
   const [search, setSearch] = useState("");
+  const [extras, setExtras] = useState<ExtraFilters>({});
+  const [showExtras, setShowExtras] = useState(false);
   const q = useDeferredValue(search.trim());
+  const extraCount = [extras.tag, extras.author, extras.createdAfter, extras.createdBefore].filter(
+    Boolean,
+  ).length;
 
   const query = new URLSearchParams(useSearch());
   const compose = query.has("new");
   const board = params.board ?? query.get("board") ?? boards[0]?.slug;
   const { data: counts } = useCounts(board);
-  const { data: posts, isLoading } = usePosts({ board, status, sort, q: q || undefined });
+  const { data: posts, isLoading } = usePosts({
+    board,
+    status,
+    sort,
+    q: q || undefined,
+    ...extras,
+  });
 
   return (
     <div className="flex flex-col gap-6">
@@ -98,6 +111,36 @@ export function Feedback() {
             ))}
           </div>
         </div>
+
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            aria-expanded={showExtras}
+            onClick={() => setShowExtras((open) => !open)}
+            className={`inline-flex h-7 items-center rounded-full px-3 text-[13px] transition-colors ${
+              extraCount ? "bg-accent text-white" : "text-muted hover:bg-hover hover:text-fg"
+            }`}
+          >
+            Filters{extraCount ? ` · ${extraCount}` : ""}
+          </button>
+          {extraCount > 0 && (
+            <button
+              type="button"
+              onClick={() => setExtras({})}
+              className="text-[13px] text-muted hover:text-fg"
+            >
+              Clear
+            </button>
+          )}
+        </div>
+        {showExtras && (
+          <PostFilterExtras
+            filter={extras}
+            onChange={(patch) => setExtras((current) => ({ ...current, ...patch }))}
+            board={board}
+            authorAsText
+          />
+        )}
         <VoteBudget />
       </div>
 

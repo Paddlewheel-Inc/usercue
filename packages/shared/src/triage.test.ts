@@ -31,7 +31,11 @@ test("similarity needs most of the terms to match", () => {
 });
 
 test("view queries keep only known keys and drop empty values", () => {
-  expect(normalizeViewQuery("status=open&evil=1&board=&tag=3&minVotes=%205")).toBe(
-    "status=open&tag=3&minVotes=5",
+  expect(
+    normalizeViewQuery(
+      "status=open&evil=1&board=&tag=3%2C5&tagMode=all&author=9&createdAfter=2026-01-01&createdBefore=2026-02-01&minVotes=%205&junk=1",
+    ),
+  ).toBe(
+    "status=open&tag=3%2C5&tagMode=all&author=9&createdAfter=2026-01-01&createdBefore=2026-02-01&minVotes=5",
   );
 });
