@@ -3,11 +3,11 @@ import { type FormEvent, useState } from "react";
 import { getSavedName, saveName } from "../lib/format";
 import { useAuthMethods, useCreatePost, useMe, useTags } from "../lib/queries";
 import { isEmbedded } from "../lib/visitor";
+import { Captcha, isCaptchaEnabled } from "./Captcha";
 import { Editor } from "./Editor";
 import { OAuthButtons } from "./OAuthButtons";
 import { SimilarPosts } from "./SimilarPosts";
 import { ErrorText } from "./ui";
-import { Captcha, isCaptchaEnabled } from "./Captcha";
 
 export function PostForm({ board, defaultOpen = false }: { board: string; defaultOpen?: boolean }) {
   const { data: me } = useMe();
@@ -32,10 +32,7 @@ export function PostForm({ board, defaultOpen = false }: { board: string; defaul
   const suspended = Boolean(user?.suspended);
   const needsTag = requireTags && tagIds.length === 0;
   const canPost =
-    !mustSignIn &&
-    !suspended &&
-    !needsTag &&
-    (!isCaptchaEnabled || Boolean(captchaToken));
+    !mustSignIn && !suspended && !needsTag && (!isCaptchaEnabled || Boolean(captchaToken));
 
   function toggleTag(id: number) {
     setTagIds((current) => {
