@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Fix fresh database startup by creating the posts author index after the `author_id` migration.
+
 ## [1.3.0]
 
 - Send email and receive feedback by email through Postbound instead of Resend. Existing settings carry over, but replace an old key with a Postbound `pb_…` key and point webhooks at `/api/inbound/postbound`. Environment variables are now `POSTBOUND_API_KEY` and `POSTBOUND_FROM`.

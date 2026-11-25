@@ -116,7 +116,6 @@ const SCHEMA = `
   );
   CREATE INDEX IF NOT EXISTS posts_board_status ON posts(board_id, status);
   CREATE INDEX IF NOT EXISTS posts_votes ON posts(vote_count DESC);
-  CREATE INDEX IF NOT EXISTS posts_author ON posts(author_id);
   CREATE INDEX IF NOT EXISTS posts_created_at ON posts(created_at DESC);
 
   CREATE TABLE IF NOT EXISTS votes (
@@ -391,6 +390,7 @@ const MIGRATE = `
   ALTER TABLE oauth_providers ALTER COLUMN enabled SET DEFAULT 0;
   ALTER TABLE posts ADD COLUMN IF NOT EXISTS author_id INTEGER REFERENCES users(id) ON DELETE SET NULL;
   ALTER TABLE comments ADD COLUMN IF NOT EXISTS author_id INTEGER REFERENCES users(id) ON DELETE SET NULL;
+  CREATE INDEX IF NOT EXISTS posts_author ON posts(author_id);
   ALTER TABLE workspace ADD COLUMN IF NOT EXISTS assignment_mode TEXT NOT NULL DEFAULT 'off';
   ALTER TABLE workspace ADD COLUMN IF NOT EXISTS assignment_cursor INTEGER NOT NULL DEFAULT 0;
   ALTER TABLE workspace ADD COLUMN IF NOT EXISTS accent TEXT NOT NULL DEFAULT 'pink';
