@@ -1,6 +1,8 @@
 # UserCue releases
 
-## [1.2.5]
+## [Unreleased]
+
+## [1.3.0]
 
 - Send email and receive feedback by email through Postbound instead of Resend. Existing settings carry over, but replace an old key with a Postbound `pb_…` key and point webhooks at `/api/inbound/postbound`. Environment variables are now `POSTBOUND_API_KEY` and `POSTBOUND_FROM`.
 - Add a Send test email button under Settings → Notifications. It sends to your account address through the enabled provider and shows the last result.
