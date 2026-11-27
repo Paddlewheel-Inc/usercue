@@ -20,6 +20,8 @@ Collect suggestions, let people vote, publish a roadmap, and close the loop with
   <a href="https://discord.usercue.app"><img src="https://img.shields.io/badge/Discord-Get%20support-5865F2?style=flat-square&logo=discord&logoColor=white" alt="Join the UserCue Discord" /></a>
   <img src="https://img.shields.io/badge/License-SLI--HR--1.0-ff2b87?style=flat-square" alt="SLI-HR-1.0 license" />
   <img src="https://img.shields.io/badge/Bun-React%20%2B%20Hono-black?style=flat-square&logo=bun&logoColor=white" alt="Built with Bun, React, and Hono" />
+  <img src="https://img.shields.io/github/v/tag/Paddlewheel-Inc/usercue?style=flat-square&color=FF0099" />
+  <img src="https://img.shields.io/github/last-commit/Paddlewheel-Inc/usercue?style=flat-square&color=FF0099" />
 </p>
 
 <br />
