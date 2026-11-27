@@ -3,17 +3,31 @@ import { decryptSecret } from "./secret";
 import { sendSmtpEmail, smtpEnabled } from "./smtp";
 import { getWorkspace } from "./workspace";
 
-export async function postboundCredentials(): Promise<{ key: string; from: string } | null> {
+async function postboundFields(): Promise<{ key: string; from: string }> {
   const workspace = await getWorkspace();
   const key = workspace.postbound_key_cipher
     ? decryptSecret(workspace.postbound_key_cipher)
     : env.postboundApiKey;
   const from = workspace.postbound_from || env.postboundFrom;
-  return key && from ? { key, from } : null;
+  return { key, from };
+}
+
+export async function postboundCredentials(): Promise<{ key: string; from: string } | null> {
+  const fields = await postboundFields();
+  return fields.key && fields.from ? fields : null;
 }
 
 export async function postboundConfigured(): Promise<boolean> {
   return (await postboundCredentials()) !== null;
+}
+
+export async function postboundStatus(): Promise<{
+  key: boolean;
+  from: boolean;
+  ready: boolean;
+}> {
+  const { key, from } = await postboundFields();
+  return { key: Boolean(key), from: Boolean(from), ready: Boolean(key && from) };
 }
 
 export async function postboundEnabled(): Promise<boolean> {

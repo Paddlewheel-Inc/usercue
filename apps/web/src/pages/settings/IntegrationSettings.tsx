@@ -352,6 +352,12 @@ function isLocalUrl(url: string) {
   }
 }
 
+function joinList(items: string[]) {
+  if (items.length <= 1) return items[0] ?? "";
+  if (items.length === 2) return `${items[0]} and ${items[1]}`;
+  return `${items.slice(0, -1).join(", ")}, and ${items.at(-1)}`;
+}
+
 function InboundSettings() {
   const { data } = useSettings();
   const save = useSaveSettings();
@@ -366,6 +372,18 @@ function InboundSettings() {
 
   if (!data) return null;
 
+  const missingPostbound = [
+    !data.inbound.postboundKeyReady && "API key",
+    !data.inbound.postboundFromReady && "from address",
+  ].filter((item): item is string => Boolean(item));
+  const missing = [
+    ...missingPostbound.map((item) => `Postbound ${item}`),
+    !data.inbound.configured && !secret.trim() && "webhook signing secret",
+  ].filter((item): item is string => Boolean(item));
+  const canEnable = missing.length === 0;
+  const attemptingEnable = enabled && !data.inbound.enabled;
+  const saveBlocked = attemptingEnable && !canEnable;
+
   function submit(e: FormEvent) {
     e.preventDefault();
     save.mutate({ inboundEnabled: enabled, inboundSecret: secret.trim() || undefined });
@@ -377,10 +395,11 @@ function InboundSettings() {
         Turn emails into feedback. Customers write to an address on your domain and the message
         becomes a request. Receiving is handled by Postbound.
       </SectionHead>
-      {!data.inbound.postboundReady && (
+      {missingPostbound.length > 0 && (
         <p className="rounded-2xl bg-hover/60 px-3.5 py-3 text-[12px] text-muted">
-          Add your Postbound API key and from address under Notifications first. The key needs full
-          access, because it is used to read the incoming message.
+          Add a Postbound {joinList(missingPostbound)} under Settings → Notifications → Email
+          delivery first. The key needs full access, because it is used to read the incoming
+          message.
         </p>
       )}
       {isLocalUrl(data.inbound.url) && (
@@ -435,14 +454,26 @@ function InboundSettings() {
             data.inbound.configured ? "Leave blank to keep the current secret" : "whsec_…"
           }
         />
+        {!data.inbound.configured && !secret.trim() && (
+          <span className="px-1 text-[11px] text-muted">
+            Copy the signing secret from the Postbound webhook above.
+          </span>
+        )}
       </label>
-      <Checkbox checked={enabled} onChange={setEnabled}>
+      <Checkbox checked={enabled} onChange={setEnabled} disabled={!canEnable && !enabled}>
         Accept feedback by email
       </Checkbox>
+      {!canEnable && (
+        <p className="px-1 text-[11px] text-muted">
+          {data.inbound.enabled
+            ? `Setup is incomplete: add ${joinList(missing)} or turn this off.`
+            : `To enable, add ${joinList(missing)} first.`}
+        </p>
+      )}
       <div className="flex items-center gap-2">
         <ErrorText error={save.error} />
         <div className="flex-1" />
-        <button type="submit" className="btn-primary" disabled={save.isPending}>
+        <button type="submit" className="btn-primary" disabled={save.isPending || saveBlocked}>
           Save
         </button>
       </div>

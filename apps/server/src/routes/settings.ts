@@ -21,9 +21,9 @@ import {
   emailEnabled,
   emailTestActivity,
   noteEmailTest,
-  postboundConfigured,
   postboundCredentials,
   postboundEnabled,
+  postboundStatus,
   sendEmail,
   sendInviteEmail,
 } from "../mail";
@@ -289,6 +289,7 @@ function serializeRole(row: RoleRow, userCount = 0) {
 async function snapshot(origin: string, includeStaff: boolean) {
   const workspace = await getWorkspace();
   const creds = await postboundCredentials();
+  const postbound = await postboundStatus();
   const now = Math.floor(Date.now() / 1000);
   return {
     allowGuestFeedback: workspace.allow_guest_feedback === 1,
@@ -305,9 +306,11 @@ async function snapshot(origin: string, includeStaff: boolean) {
     faviconUrl: workspace.favicon_url.trim() || null,
     shareImageUrl: workspace.share_image_url.trim() || null,
     postbound: {
-      configured: await postboundConfigured(),
+      configured: postbound.ready,
       enabled: await postboundEnabled(),
       from: workspace.postbound_from || env.postboundFrom || null,
+      keyReady: postbound.key,
+      fromReady: postbound.from,
       keyHash: workspace.postbound_key_hash ? workspace.postbound_key_hash.slice(0, 12) : null,
       fromEnv: Boolean(!workspace.postbound_key_cipher && creds),
     },
@@ -352,7 +355,9 @@ async function snapshot(origin: string, includeStaff: boolean) {
       configured: Boolean(workspace.inbound_secret_cipher),
       keyHash: workspace.inbound_secret_hash ? workspace.inbound_secret_hash.slice(0, 12) : null,
       url: `${origin}/api/inbound/postbound`,
-      postboundReady: await postboundConfigured(),
+      postboundReady: postbound.ready,
+      postboundKeyReady: postbound.key,
+      postboundFromReady: postbound.from,
       last: inboundActivity(),
     },
     ai: {
@@ -632,7 +637,14 @@ export const settings = new Hono<AppEnv>()
       );
       const hasFrom = Boolean(from || env.postboundFrom);
       if (body.postboundEnabled && (!hasKey || !hasFrom)) {
-        return c.json({ error: "Add a Postbound API key and from address first." }, 400);
+        return c.json(
+          {
+            error: !hasKey
+              ? "Add a Postbound API key first."
+              : "Add a Postbound from address first.",
+          },
+          400,
+        );
       }
       const smtpHost = body.smtpHost !== undefined ? body.smtpHost.trim() : current.smtp_host;
       const smtpFrom = body.smtpFrom !== undefined ? body.smtpFrom.trim() : current.smtp_from;
@@ -672,12 +684,16 @@ export const settings = new Hono<AppEnv>()
         );
       }
       if (body.inboundEnabled) {
+        const postbound = await postboundStatus();
+        if (!postbound.key) {
+          return c.json({ error: "Add a Postbound API key under Notifications first." }, 400);
+        }
+        if (!postbound.from) {
+          return c.json({ error: "Add a Postbound from address under Notifications first." }, 400);
+        }
         const hasSecret = Boolean(body.inboundSecret?.trim() || current.inbound_secret_cipher);
-        if (!hasSecret || !(await postboundConfigured())) {
-          return c.json(
-            { error: "Add a Postbound API key and the webhook signing secret first." },
-            400,
-          );
+        if (!hasSecret) {
+          return c.json({ error: "Add the webhook signing secret first." }, 400);
         }
       }
       if (body.aiBaseUrl && !parseWebhookUrl(body.aiBaseUrl)) {

@@ -66,6 +66,11 @@ function PostboundSettings() {
           placeholder="UserCue <noreply@yourdomain.com>"
           autoComplete="off"
         />
+        {!data.postbound.fromReady && (
+          <span className="px-1 text-[11px] text-muted">
+            Required before Postbound can send or receive email.
+          </span>
+        )}
       </label>
       <label className="flex flex-col gap-1.5">
         <span className="px-1 text-[11px] text-muted">API key</span>
@@ -82,6 +87,11 @@ function PostboundSettings() {
               : "pb_…"
           }
         />
+        {!data.postbound.keyReady && (
+          <span className="px-1 text-[11px] text-muted">
+            No key saved yet. Add a pb_… key with full access.
+          </span>
+        )}
         {!data.postbound.keyHash && data.postbound.fromEnv && (
           <p className="px-1 text-[11px] text-faint">Using the key from the environment.</p>
         )}
