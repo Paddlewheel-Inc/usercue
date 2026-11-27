@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Add configurable reCAPTCHA v2 protection for new posts, comments and replies, sign-in, and workspace setup or invites. Keys are read from `RECAPTCHA_SITE_KEY` and `RECAPTCHA_SECRET_KEY`; admins enable each action under Settings → Captchas, and `RECAPTCHA_ACTIONS` can force actions on from the environment. Tokens are verified on the server before an action goes through.
+
 ## [1.3.1]
 
 - Fix fresh database startup by creating the posts author index after the `author_id` migration.

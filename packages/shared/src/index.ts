@@ -27,6 +27,16 @@ export const STAFF_SORTS: readonly Sort[] = ["priority"];
 export const VOTE_LIMIT_MAX = 100;
 export const VOTE_LIMIT_CODE = "vote_limit";
 
+export const CAPTCHA_ACTIONS = ["posts", "comments", "login", "setup"] as const;
+export type CaptchaAction = (typeof CAPTCHA_ACTIONS)[number];
+
+export const CAPTCHA_ACTION_LABELS: Record<CaptchaAction, string> = {
+  posts: "New suggestions",
+  comments: "Comments and replies",
+  login: "Sign in and workspace login",
+  setup: "Workspace setup and invitations",
+};
+
 export const ASSIGNMENT_MODES = ["off", "manual", "auto"] as const;
 export type AssignmentMode = (typeof ASSIGNMENT_MODES)[number];
 

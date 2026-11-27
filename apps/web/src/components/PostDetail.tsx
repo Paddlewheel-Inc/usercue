@@ -19,6 +19,7 @@ import {
   useVote,
 } from "../lib/queries";
 import { useWorkflow, useWorkflowStatus } from "../lib/workflow";
+import { Captcha, type CaptchaHandle, useCaptcha } from "./Captcha";
 import { Editor } from "./Editor";
 import { Check, More, Plus, Trash } from "./icons";
 import { MergePanel } from "./MergeDialog";
@@ -768,8 +769,11 @@ function CommentForm({
   const { data: methods } = useAuthMethods();
   const add = useAddComment(postId);
   const formRef = useRef<HTMLFormElement>(null);
+  const captchaRef = useRef<CaptchaHandle>(null);
   const [body, setBody] = useState("");
   const [name, setName] = useState(getSavedName);
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+  const { enabled: captchaEnabled } = useCaptcha("comments");
   const user = me?.user;
   const identity = me?.identity;
   const guest = !user && !identity;
@@ -781,17 +785,29 @@ function CommentForm({
     if (autoFocus) formRef.current?.scrollIntoView({ block: "nearest" });
   }, [autoFocus]);
 
+  function resetCaptcha() {
+    captchaRef.current?.reset();
+    setCaptchaToken(null);
+  }
+
   function submit(e: FormEvent) {
     e.preventDefault();
     const author = guest ? name.trim() : undefined;
     if (author) saveName(author);
     add.mutate(
-      { body, name: author, parentId },
+      {
+        body,
+        name: author,
+        parentId,
+        captchaToken: captchaEnabled ? (captchaToken ?? undefined) : undefined,
+      },
       {
         onSuccess: () => {
           setBody("");
+          resetCaptcha();
           onCancel?.();
         },
+        onError: resetCaptcha,
       },
     );
   }
@@ -816,6 +832,9 @@ function CommentForm({
             <p className="text-[12px] text-muted">Sign in is required to comment.</p>
           )}
         </div>
+      )}
+      {captchaEnabled && (
+        <Captcha ref={captchaRef} action="comments" className="mt-2" onVerify={setCaptchaToken} />
       )}
       <div className="mt-2 flex items-center gap-2">
         {guest && allowGuest && (
@@ -845,7 +864,9 @@ function CommentForm({
         <button
           type="submit"
           className="btn-primary h-7 px-2.5"
-          disabled={add.isPending || !body || mustSignIn || suspended}
+          disabled={
+            add.isPending || !body || mustSignIn || suspended || (captchaEnabled && !captchaToken)
+          }
         >
           {submitLabel}
         </button>

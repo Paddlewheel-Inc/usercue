@@ -153,6 +153,7 @@ export function useCreatePost() {
       body: string;
       name?: string;
       tagIds?: number[];
+      captchaToken?: string;
     }) => unwrap(api.posts.$post({ json: body })),
     onSuccess: invalidate,
   });
@@ -380,7 +381,7 @@ export const useAudit = () =>
 export function useAddComment(postId: number) {
   const invalidate = useInvalidatePosts();
   return useMutation({
-    mutationFn: (body: { body: string; name?: string; parentId?: number }) =>
+    mutationFn: (body: { body: string; name?: string; parentId?: number; captchaToken?: string }) =>
       unwrap(api.posts[":id"].comments.$post({ param: { id: String(postId) }, json: body })),
     onSuccess: invalidate,
   });
@@ -758,6 +759,10 @@ export function useSaveSettings() {
       aiBaseUrl?: string;
       aiModel?: string;
       aiApiKey?: string;
+      captchaPosts?: boolean;
+      captchaComments?: boolean;
+      captchaLogin?: boolean;
+      captchaSetup?: boolean;
     }) => unwrap(api.settings.$patch({ json })),
     onSuccess: (data) => {
       qc.setQueryData(["settings"], data);
@@ -946,7 +951,7 @@ export function useUpdateProfile() {
 export function useAcceptInvite(token: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (json: { email: string; name: string; password: string }) =>
+    mutationFn: (json: { email: string; name: string; password: string; captchaToken?: string }) =>
       unwrap(api.auth.invite[":token"].$post({ param: { token }, json })),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["me"] }),
   });
@@ -957,13 +962,17 @@ export function useAuth() {
   const refresh = () => qc.invalidateQueries({ queryKey: ["me"] });
   return {
     login: useMutation({
-      mutationFn: (json: { email: string; password: string }) =>
+      mutationFn: (json: { email: string; password: string; captchaToken?: string }) =>
         unwrap(api.auth.login.$post({ json })),
       onSuccess: refresh,
     }),
     setup: useMutation({
-      mutationFn: (json: { email: string; password: string; name: string }) =>
-        unwrap(api.auth.setup.$post({ json })),
+      mutationFn: (json: {
+        email: string;
+        password: string;
+        name: string;
+        captchaToken?: string;
+      }) => unwrap(api.auth.setup.$post({ json })),
       onSuccess: () => Promise.all([refresh(), qc.invalidateQueries({ queryKey: ["boards"] })]),
     }),
     logout: useMutation({

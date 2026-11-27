@@ -13,6 +13,7 @@ import {
 import { Hono } from "hono";
 import * as v from "valibot";
 import { recordAudit } from "../audit";
+import { captchaSettings } from "../captcha";
 import { db } from "../db";
 import { planSnapshot, withinPlanLimit } from "../entitlements";
 import { env } from "../env";
@@ -367,6 +368,7 @@ async function snapshot(origin: string, includeStaff: boolean) {
       model: workspace.ai_model || null,
       keyHash: workspace.ai_key_hash ? workspace.ai_key_hash.slice(0, 12) : null,
     },
+    captcha: await captchaSettings(),
     oauthOnly: workspace.oauth_only === 1,
     customerTags: workspace.customer_tags === 1,
     customerTagsRequired: workspace.customer_tags === 1 && workspace.customer_tags_required === 1,
@@ -625,6 +627,10 @@ export const settings = new Hono<AppEnv>()
         aiBaseUrl: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(300))),
         aiModel: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(100))),
         aiApiKey: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(300))),
+        captchaPosts: v.optional(v.boolean()),
+        captchaComments: v.optional(v.boolean()),
+        captchaLogin: v.optional(v.boolean()),
+        captchaSetup: v.optional(v.boolean()),
       }),
     ),
     async (c) => {
@@ -709,6 +715,17 @@ export const settings = new Hono<AppEnv>()
       if (body.customerTagsRequired) {
         const tags = await countTags.get();
         if (!tags?.n) return c.json({ error: "Add a tag before requiring one." }, 400);
+      }
+      if (
+        [body.captchaPosts, body.captchaComments, body.captchaLogin, body.captchaSetup].some(
+          Boolean,
+        ) &&
+        !(env.recaptchaSiteKey && env.recaptchaSecretKey)
+      ) {
+        return c.json(
+          { error: "Set RECAPTCHA_SITE_KEY and RECAPTCHA_SECRET_KEY before turning on captchas." },
+          400,
+        );
       }
       if (body.oauthOnly) {
         const enabled = await countEnabledProviders.get();

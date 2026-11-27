@@ -1,5 +1,6 @@
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useRef, useState } from "react";
 import { Link, useLocation, useSearch } from "wouter";
+import { Captcha, type CaptchaHandle, useCaptcha } from "../components/Captcha";
 import { OAuthButtons } from "../components/OAuthButtons";
 import { Logo } from "../components/PublicLayout";
 import { ThemeToggle } from "../components/ThemeToggle";
@@ -14,18 +15,37 @@ export function AuthPage({ mode }: { mode: "login" | "setup" | "signin" }) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+  const captchaRef = useRef<CaptchaHandle>(null);
 
   const isSetup = mode === "setup";
   const isSignin = mode === "signin";
+  const captchaAction = isSetup ? "setup" : "login";
+  const { enabled: captchaEnabled } = useCaptcha(captchaAction);
   const mutation = isSetup ? setup : login;
   const showOAuth = !isSetup && Boolean(methods?.providers.length);
   const forceOAuth = isFetched && methods?.passwordLogin === false;
   const showPassword = isSetup || (!isSignin && isFetched && !forceOAuth);
 
+  function resetCaptcha() {
+    captchaRef.current?.reset();
+    setCaptchaToken(null);
+  }
+
   function submit(e: FormEvent) {
     e.preventDefault();
-    if (isSetup) setup.mutate({ name, email, password });
-    else login.mutate({ email, password }, { onSuccess: () => navigate("/admin") });
+    const token = captchaEnabled ? (captchaToken ?? undefined) : undefined;
+    if (isSetup) {
+      setup.mutate({ name, email, password, captchaToken: token }, { onError: resetCaptcha });
+    } else {
+      login.mutate(
+        { email, password, captchaToken: token },
+        {
+          onSuccess: () => navigate("/admin"),
+          onError: resetCaptcha,
+        },
+      );
+    }
   }
 
   return (
@@ -58,9 +78,21 @@ export function AuthPage({ mode }: { mode: "login" | "setup" | "signin" }) {
 
         {oauthError && <p className="text-center text-xs text-rose-500">{oauthError}</p>}
 
+        {captchaEnabled && (
+          <Captcha
+            ref={captchaRef}
+            action={captchaAction}
+            className="self-center"
+            onVerify={setCaptchaToken}
+          />
+        )}
+
         {showOAuth && (
           <>
-            <OAuthButtons next={isSignin ? "board" : "admin"} />
+            <OAuthButtons
+              next={isSignin ? "board" : "admin"}
+              captchaToken={captchaEnabled ? captchaToken : undefined}
+            />
             {showPassword && (
               <div className="flex items-center gap-3 text-[11px] tracking-[0.12em] text-faint uppercase">
                 <span className="h-px flex-1 bg-line" />
@@ -134,7 +166,11 @@ export function AuthPage({ mode }: { mode: "login" | "setup" | "signin" }) {
               required
             />
             <ErrorText error={mutation.error} />
-            <button type="submit" className="btn-primary mt-1 h-9" disabled={mutation.isPending}>
+            <button
+              type="submit"
+              className="btn-primary mt-1 h-9"
+              disabled={mutation.isPending || (captchaEnabled && !captchaToken)}
+            >
               {isSetup ? "Create workspace" : "Continue"}
             </button>
           </>

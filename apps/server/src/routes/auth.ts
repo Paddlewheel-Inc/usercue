@@ -3,6 +3,7 @@ import { Hono } from "hono";
 import { deleteCookie, getCookie } from "hono/cookie";
 import * as v from "valibot";
 import { aiAvailable } from "../ai";
+import { captchaSettings, checkCaptcha } from "../captcha";
 import { db } from "../db";
 import {
   type AppEnv,
@@ -29,6 +30,7 @@ import {
 const credentials = v.object({
   email: v.pipe(v.string(), v.trim(), v.toLowerCase(), v.email()),
   password: v.pipe(v.string(), v.minLength(8), v.maxLength(200)),
+  captchaToken: v.optional(v.pipe(v.string(), v.maxLength(2000))),
 });
 
 const setupSchema = v.object({
@@ -96,6 +98,7 @@ export const auth = new Hono<AppEnv>()
       assignmentMode: await assignmentMode(),
       aiEnabled: user?.staff ? await aiAvailable() : false,
       triageBoards: user?.staff ? await triageBoardSlugs() : [],
+      captcha: await captchaSettings(),
       accent: await workspaceAccent(),
       logoUrl: logos.light,
       logoDarkUrl: logos.dark,
@@ -171,7 +174,9 @@ export const auth = new Hono<AppEnv>()
   .post("/setup", rateLimit(10, 60), vValidator("json", setupSchema), async (c) => {
     if (!(await needsSetup())) return c.json({ error: "Already set up" }, 403);
 
-    const { email, name, password } = c.req.valid("json");
+    const { email, name, password, captchaToken } = c.req.valid("json");
+    const captchaFailure = await checkCaptcha(c, "setup", captchaToken);
+    if (captchaFailure) return captchaFailure;
     const hash = await Bun.password.hash(password);
     const row = await insertUser.get(email, name, hash, await ownerRoleId());
     if (!row) return c.json({ error: "Could not create user" }, 500);
@@ -185,7 +190,9 @@ export const auth = new Hono<AppEnv>()
     if (await oauthOnly()) {
       return c.json({ error: "Sign in with a connected account." }, 403);
     }
-    const { email, password } = c.req.valid("json");
+    const { email, password, captchaToken } = c.req.valid("json");
+    const captchaFailure = await checkCaptcha(c, "login", captchaToken);
+    if (captchaFailure) return captchaFailure;
     const user = await findUser.get(email);
 
     if (
@@ -225,7 +232,9 @@ export const auth = new Hono<AppEnv>()
       return c.json({ error: "This invite is invalid or has expired." }, 404);
     }
 
-    const { email, name, password } = c.req.valid("json");
+    const { email, name, password, captchaToken } = c.req.valid("json");
+    const captchaFailure = await checkCaptcha(c, "setup", captchaToken);
+    if (captchaFailure) return captchaFailure;
     if (email !== row.email) return c.json({ error: "Use the invited email address." }, 400);
     if (await findUser.get(email))
       return c.json({ error: "That email already has an account." }, 409);

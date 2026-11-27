@@ -1,9 +1,9 @@
 import { LIMITS, tagColorHex } from "@usercue/shared";
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useRef, useState } from "react";
 import { getSavedName, saveName } from "../lib/format";
 import { useAuthMethods, useCreatePost, useMe, useTags } from "../lib/queries";
 import { isEmbedded } from "../lib/visitor";
-import { Captcha, isCaptchaEnabled } from "./Captcha";
+import { Captcha, type CaptchaHandle, useCaptcha } from "./Captcha";
 import { Editor } from "./Editor";
 import { OAuthButtons } from "./OAuthButtons";
 import { SimilarPosts } from "./SimilarPosts";
@@ -22,6 +22,8 @@ export function PostForm({ board, defaultOpen = false }: { board: string; defaul
   const [name, setName] = useState(getSavedName);
   const [tagIds, setTagIds] = useState<number[]>([]);
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+  const captchaRef = useRef<CaptchaHandle>(null);
+  const { enabled: captchaEnabled } = useCaptcha("posts");
 
   const user = me?.user;
   const identity = me?.identity;
@@ -32,7 +34,12 @@ export function PostForm({ board, defaultOpen = false }: { board: string; defaul
   const suspended = Boolean(user?.suspended);
   const needsTag = requireTags && tagIds.length === 0;
   const canPost =
-    !mustSignIn && !suspended && !needsTag && (!isCaptchaEnabled || Boolean(captchaToken));
+    !mustSignIn && !suspended && !needsTag && (!captchaEnabled || Boolean(captchaToken));
+
+  function resetCaptcha() {
+    captchaRef.current?.reset();
+    setCaptchaToken(null);
+  }
 
   function toggleTag(id: number) {
     setTagIds((current) => {
@@ -48,15 +55,23 @@ export function PostForm({ board, defaultOpen = false }: { board: string; defaul
     if (author) saveName(author);
 
     create.mutate(
-      { board, title, body, name: author, tagIds: allowTags ? tagIds : undefined },
+      {
+        board,
+        title,
+        body,
+        name: author,
+        tagIds: allowTags ? tagIds : undefined,
+        captchaToken: captchaEnabled ? (captchaToken ?? undefined) : undefined,
+      },
       {
         onSuccess: () => {
           setTitle("");
           setBody("");
           setTagIds([]);
-          setCaptchaToken(null);
+          resetCaptcha();
           setOpen(false);
         },
+        onError: resetCaptcha,
       },
     );
   }
@@ -138,7 +153,9 @@ export function PostForm({ board, defaultOpen = false }: { board: string; defaul
             {suspended && <p className="text-xs text-rose-500">Your account has been suspended.</p>}
             <ErrorText error={create.error} />
             <div className="flex-1" />
-            <Captcha onVerify={setCaptchaToken} />
+            {captchaEnabled && (
+              <Captcha ref={captchaRef} action="posts" onVerify={setCaptchaToken} />
+            )}
             <button type="button" className="btn-quiet" onClick={() => setOpen(false)}>
               Cancel
             </button>

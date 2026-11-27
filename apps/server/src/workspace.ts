@@ -56,6 +56,10 @@ export interface WorkspaceRow {
   ai_model: string;
   ai_key_cipher: string;
   ai_key_hash: string;
+  captcha_posts: number;
+  captcha_comments: number;
+  captcha_login: number;
+  captcha_setup: number;
 }
 
 export interface WorkspaceExtras {
@@ -74,6 +78,10 @@ export interface WorkspaceExtras {
   aiBaseUrl?: string;
   aiModel?: string;
   aiApiKey?: string;
+  captchaPosts?: boolean;
+  captchaComments?: boolean;
+  captchaLogin?: boolean;
+  captchaSetup?: boolean;
 }
 
 export interface Branding {
@@ -192,6 +200,10 @@ const empty: WorkspaceRow = {
   ai_model: "",
   ai_key_cipher: "",
   ai_key_hash: "",
+  captcha_posts: 0,
+  captcha_comments: 0,
+  captcha_login: 0,
+  captcha_setup: 0,
 };
 
 export function parseAssignmentMode(value: string | null | undefined): AssignmentMode {
@@ -250,6 +262,10 @@ async function saveExtras(patch: WorkspaceExtras, current: WorkspaceRow) {
     columns.ai_base_url = patch.aiBaseUrl.trim().replace(/\/+$/, "");
   if (patch.aiModel !== undefined) columns.ai_model = patch.aiModel.trim();
   secret(patch.aiApiKey, "ai_key_cipher", "ai_key_hash");
+  if (patch.captchaPosts !== undefined) columns.captcha_posts = flag(patch.captchaPosts);
+  if (patch.captchaComments !== undefined) columns.captcha_comments = flag(patch.captchaComments);
+  if (patch.captchaLogin !== undefined) columns.captcha_login = flag(patch.captchaLogin);
+  if (patch.captchaSetup !== undefined) columns.captcha_setup = flag(patch.captchaSetup);
 
   await updateColumns(columns);
 }

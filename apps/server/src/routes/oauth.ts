@@ -3,6 +3,7 @@ import { AUTH_PROVIDER_META, AUTH_PROVIDERS } from "@usercue/shared";
 import { Hono } from "hono";
 import { deleteCookie, getCookie } from "hono/cookie";
 import * as v from "valibot";
+import { CaptchaError, enforceCaptcha } from "../captcha";
 import { db } from "../db";
 import { withinPlanLimit } from "../entitlements";
 import {
@@ -241,6 +242,14 @@ export const oauth = new Hono<AppEnv>()
         return c.redirect(
           `/account?error=${encodeURIComponent("Your account has been suspended.")}`,
         );
+      }
+    }
+    if (next !== "link") {
+      try {
+        await enforceCaptcha(c, "login", c.req.query("captcha"));
+      } catch (error) {
+        if (error instanceof CaptchaError) return fail(c, next, error.message);
+        throw error;
       }
     }
     const origin = publicOrigin(c);

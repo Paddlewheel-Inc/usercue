@@ -15,6 +15,7 @@ import {
 import { Hono } from "hono";
 import * as v from "valibot";
 import { recordAudit } from "../audit";
+import { checkCaptcha } from "../captcha";
 import { type CommentRow, db, type PostRow } from "../db";
 import { notifyMentions } from "../mentions";
 import { redirectTarget } from "../merge";
@@ -75,6 +76,7 @@ const createPost = v.object({
   body: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(LIMITS.body)), ""),
   name: v.optional(text(LIMITS.name)),
   tagIds: v.optional(v.array(v.pipe(v.number(), v.integer(), v.minValue(1)))),
+  captchaToken: v.optional(v.pipe(v.string(), v.maxLength(2000))),
 });
 
 const updatePost = v.object({
@@ -92,6 +94,7 @@ const createComment = v.object({
   body: text(LIMITS.comment),
   name: v.optional(text(LIMITS.name)),
   parentId: v.optional(v.pipe(v.number(), v.integer(), v.minValue(1))),
+  captchaToken: v.optional(v.pipe(v.string(), v.maxLength(2000))),
 });
 
 const idParam = v.object({ id: numberParam(1, Number.MAX_SAFE_INTEGER) });
@@ -525,9 +528,11 @@ export const posts = new Hono<AppEnv>()
   })
 
   .post("/", authenticateApiKey, rateLimit(10, 60), vValidator("json", createPost), async (c) => {
-    const { board, title, body, name, tagIds: rawTagIds } = c.req.valid("json");
+    const { board, title, body, name, tagIds: rawTagIds, captchaToken } = c.req.valid("json");
     const team = c.get("user");
     const identity = c.get("identity");
+    const captchaFailure = await checkCaptcha(c, "posts", captchaToken);
+    if (captchaFailure) return captchaFailure;
     if (team?.suspended) return c.json({ error: "Your account has been suspended." }, 403);
     if (!team && !identity && !(await guestsAllowed())) {
       return c.json({ error: "Sign in to share feedback" }, 403);
@@ -632,7 +637,9 @@ export const posts = new Hono<AppEnv>()
     vValidator("json", createComment),
     async (c) => {
       const { id } = c.req.valid("param");
-      const { body, name, parentId } = c.req.valid("json");
+      const { body, name, parentId, captchaToken } = c.req.valid("json");
+      const captchaFailure = await checkCaptcha(c, "comments", captchaToken);
+      if (captchaFailure) return captchaFailure;
       if (!(await postExists.get(id))) return c.json({ error: "Not found" }, 404);
 
       let replyTo: number | null = null;

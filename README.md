@@ -57,6 +57,7 @@ The product stays out of the way. You can run it yourself or let us host it.
 | **In the door** | Feedback can arrive by email through Postbound, from an embeddable widget or inline board, or from an import of Canny, Featurebase, Productboard, or any CSV |
 | **Optional AI** | Bring any OpenAI-compatible key to summarize long threads, suggest tags, and draft changelog entries. It stays off until you add a key |
 | **Control** | Limit votes per person, manage API keys, and review an audit log of who changed what |
+| **Captchas** | Require reCAPTCHA v2 before posting, commenting, signing in, or setting up a workspace. Keys live in `.env`; admins turn each action on in Settings → Captchas |
 
 > [!CAUTION]
 > Wiping a board in **Settings, Danger zone** permanently deletes every request on it, along with its votes, comments, notes, and tags. There is no undo.
@@ -144,6 +145,8 @@ Copy `.env.example` and change only what you need. Email, sign in providers, and
 | `POSTBOUND_API_KEY`, `POSTBOUND_FROM` | empty | Email for staff invites, used when settings have no key |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`, `SMTP_SECURE` | empty | SMTP fallback when Postbound is not configured |
 | `USERCUE_PLAN_FILE` | empty | Path to a JSON plan file that limits staff seats |
+| `RECAPTCHA_SITE_KEY`, `RECAPTCHA_SECRET_KEY` | empty | Public and server-side reCAPTCHA v2 keys. Both are needed before captchas can be turned on |
+| `RECAPTCHA_ACTIONS` | empty | Comma-separated actions (`posts`, `comments`, `login`, `setup`, or `all`) to require a captcha for regardless of the settings toggles. Useful for protecting initial setup |
 
 > [!TIP]
 > The settings page is the better place for email credentials. Keys saved there are hashed and encrypted.

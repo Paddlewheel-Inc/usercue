@@ -1,5 +1,6 @@
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useRef, useState } from "react";
 import { useLocation, useParams } from "wouter";
+import { Captcha, type CaptchaHandle, useCaptcha } from "../components/Captcha";
 import { Logo } from "../components/PublicLayout";
 import { ErrorText } from "../components/ui";
 import { useAcceptInvite, useInvite } from "../lib/queries";
@@ -12,11 +13,30 @@ export function JoinPage() {
   const [, navigate] = useLocation();
   const [name, setName] = useState("");
   const [password, setPassword] = useState("");
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+  const captchaRef = useRef<CaptchaHandle>(null);
+  const { enabled: captchaEnabled } = useCaptcha("setup");
+
+  function resetCaptcha() {
+    captchaRef.current?.reset();
+    setCaptchaToken(null);
+  }
 
   function submit(e: FormEvent) {
     e.preventDefault();
     if (!data) return;
-    accept.mutate({ email: data.email, name, password }, { onSuccess: () => navigate("/admin") });
+    accept.mutate(
+      {
+        email: data.email,
+        name,
+        password,
+        captchaToken: captchaEnabled ? (captchaToken ?? undefined) : undefined,
+      },
+      {
+        onSuccess: () => navigate("/admin"),
+        onError: resetCaptcha,
+      },
+    );
   }
 
   return (
@@ -56,8 +76,20 @@ export function JoinPage() {
               minLength={8}
               required
             />
+            {captchaEnabled && (
+              <Captcha
+                ref={captchaRef}
+                action="setup"
+                className="self-center"
+                onVerify={setCaptchaToken}
+              />
+            )}
             <ErrorText error={accept.error} />
-            <button type="submit" className="btn-primary mt-1 h-9" disabled={accept.isPending}>
+            <button
+              type="submit"
+              className="btn-primary mt-1 h-9"
+              disabled={accept.isPending || (captchaEnabled && !captchaToken)}
+            >
               Create account
             </button>
           </>

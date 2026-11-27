@@ -212,7 +212,11 @@ const SCHEMA = `
     teams_webhook_hash     TEXT NOT NULL DEFAULT '',
     oauth_only             INTEGER NOT NULL DEFAULT 0,
     customer_tags          INTEGER NOT NULL DEFAULT 0,
-    customer_tags_required INTEGER NOT NULL DEFAULT 0
+    customer_tags_required INTEGER NOT NULL DEFAULT 0,
+    captcha_posts          INTEGER NOT NULL DEFAULT 0,
+    captcha_comments       INTEGER NOT NULL DEFAULT 0,
+    captcha_login          INTEGER NOT NULL DEFAULT 0,
+    captcha_setup          INTEGER NOT NULL DEFAULT 0
   );
   INSERT INTO workspace (id) VALUES (1) ON CONFLICT (id) DO NOTHING;
 
@@ -653,6 +657,10 @@ const MIGRATE = `
   ALTER TABLE workspace ADD COLUMN IF NOT EXISTS ai_model TEXT NOT NULL DEFAULT '';
   ALTER TABLE workspace ADD COLUMN IF NOT EXISTS ai_key_cipher TEXT NOT NULL DEFAULT '';
   ALTER TABLE workspace ADD COLUMN IF NOT EXISTS ai_key_hash TEXT NOT NULL DEFAULT '';
+  ALTER TABLE workspace ADD COLUMN IF NOT EXISTS captcha_posts INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE workspace ADD COLUMN IF NOT EXISTS captcha_comments INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE workspace ADD COLUMN IF NOT EXISTS captcha_login INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE workspace ADD COLUMN IF NOT EXISTS captcha_setup INTEGER NOT NULL DEFAULT 0;
 
   DO $$
   BEGIN

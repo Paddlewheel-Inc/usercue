@@ -14,4 +14,10 @@ export const env = {
   smtpPass: process.env.SMTP_PASS ?? "",
   smtpFrom: process.env.SMTP_FROM ?? process.env.POSTBOUND_FROM ?? "",
   smtpSecure: process.env.SMTP_SECURE === "true",
+  recaptchaSiteKey: process.env.RECAPTCHA_SITE_KEY ?? process.env.VITE_RECAPTCHA_SITE_KEY ?? "",
+  recaptchaSecretKey: process.env.RECAPTCHA_SECRET_KEY ?? "",
+  recaptchaActions: (process.env.RECAPTCHA_ACTIONS ?? "")
+    .split(",")
+    .map((action) => action.trim())
+    .filter(Boolean),
 };

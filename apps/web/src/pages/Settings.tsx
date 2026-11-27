@@ -47,6 +47,7 @@ import {
 } from "../lib/queries";
 import { AdminShell } from "./Admin";
 import { AuditSettings } from "./settings/AuditSettings";
+import { CaptchaSettings } from "./settings/CaptchaSettings";
 import { DangerSettings } from "./settings/DangerSettings";
 import { GeneralSettings } from "./settings/GeneralSettings";
 import { IntegrationSettings } from "./settings/IntegrationSettings";
@@ -63,6 +64,7 @@ const TABS = [
   { id: "integrations", href: "/admin/settings/integrations", label: "Integrations" },
   { id: "api-keys", href: "/admin/settings/api-keys", label: "API keys" },
   { id: "auth", href: "/admin/settings/auth", label: "Authentication" },
+  { id: "captchas", href: "/admin/settings/captchas", label: "Captchas" },
   { id: "team", href: "/admin/settings/team", label: "Team" },
   { id: "users", href: "/admin/settings/users", label: "Users" },
   { id: "roles", href: "/admin/settings/roles", label: "Roles" },
@@ -84,7 +86,15 @@ export function Settings() {
     if (tab.id === "branding") return can(me, "manage_branding");
     if (tab.id === "tags") return can(me, "manage_posts") || can(me, "manage_settings");
     if (
-      ["general", "workflow", "notifications", "integrations", "audit", "auth"].includes(tab.id)
+      [
+        "general",
+        "workflow",
+        "notifications",
+        "integrations",
+        "audit",
+        "auth",
+        "captchas",
+      ].includes(tab.id)
     ) {
       return can(me, "manage_settings");
     }
@@ -131,6 +141,8 @@ export function Settings() {
           <div className={`flex flex-col ${wide ? "max-w-2xl" : "max-w-xl"}`}>
             {tab === "auth" ? (
               <AuthSettings />
+            ) : tab === "captchas" ? (
+              <CaptchaSettings />
             ) : tab === "workflow" ? (
               <WorkflowSettings />
             ) : tab === "branding" ? (

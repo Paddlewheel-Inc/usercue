@@ -23,6 +23,10 @@ A key can only do what its permissions allow. `GET /api/v1/me` returns the key's
 | `POST /api/v1/tasks` | `dashboard` | Create a task. `PATCH /api/v1/tasks/:id` changes status, priority, manager, due date, or blocked reason. `PUT /api/v1/tasks/:id/blockers/:blockerId` marks a task as waiting on another. `PUT /api/v1/tasks/:id/members/:userId` adds a member. |
 | `GET/POST /api/v1/integrations/webhooks` | `manage_settings` | List or create webhooks. |
 
+## Captchas
+
+When captchas are turned on under **Settings → Captchas**, public submissions have to include a reCAPTCHA v2 token. Send `captchaToken` in the JSON body of `POST /api/posts`, `POST /api/posts/:id/comments`, `POST /api/auth/login`, `POST /api/auth/setup`, and `POST /api/auth/invite/:token`, or `captcha` in the query string of `GET /api/auth/oauth/:provider`. The server verifies the token with Google before running the action. UserCue's forms handle this automatically; requests authenticated with an API key are not challenged.
+
 ## Webhooks
 
 Add one in **Settings → Integrations**, or with `POST /api/v1/integrations/webhooks`. The signing secret is shown once.
