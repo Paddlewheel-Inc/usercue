@@ -21,8 +21,8 @@
     "test:release": "bun test scripts/version.test.ts scripts/promote-latest.test.ts apps/server/src/version.test.ts"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.2.0",
-    "@types/bun": "^1.4.3",
+    "@biomejs/biome": "^2.6.9",
+    "@types/bun": "^1.4.5",
     "@types/react-google-recaptcha": "^2.1.9",
     "typescript": "^5.9.0"
   },
